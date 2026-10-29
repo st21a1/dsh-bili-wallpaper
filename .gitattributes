@@ -1,0 +1,7 @@
+# 统一用 LF，避免 Windows 检出时把整仓库标记成改动
+* text=auto eol=lf
+
+# vendor 里的第三方产物按原样保存，不做换行转换
+vendor/** -text
+*.svg text
+*.md text

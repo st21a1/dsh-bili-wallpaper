@@ -1,0 +1,11 @@
+# dsh-bili-wallpaper bundle patch.
+#
+# One Host row: the plugin resolves the Bilibili live room / video into a
+# same-origin media URL, proxies the stream (video CDNs require a Referer and
+# the HLS playlist needs rewriting), and owns the scan-login + settings routes
+# under /api/bili-wallpaper. The browser half comes from `dsh.client` in
+# package.json: it draws the background layer and adds the settings page.
+- insert:
+    - id: bili-wallpaper
+      name: 'dsh-bili-wallpaper'
+      config: {}

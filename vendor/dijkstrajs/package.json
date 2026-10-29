@@ -1,0 +1,7 @@
+{
+  "name": "bw-vendor-dijkstrajs",
+  "private": true,
+  "type": "commonjs",
+  "main": "dijkstra.js",
+  "description": "Nested package marker: the vendored dijkstrajs source is CommonJS, while the outer bundle is ESM."
+}

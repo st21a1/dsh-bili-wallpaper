@@ -1,0 +1,19 @@
+# 依赖与构建产物
+node_modules/
+*.log
+
+# 测试时下载的 B 站分片（不要提交媒体文件）
+test/*.bin
+test/*.ts
+test/*.mp4
+test/*.m4s
+
+# 编辑器 / 系统
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# 本地配置与凭证（绝不会出现在仓库里）
+bili_credential.json
+config.json

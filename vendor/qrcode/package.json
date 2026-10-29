@@ -1,0 +1,6 @@
+{
+  "name": "bw-vendor-qrcode",
+  "private": true,
+  "type": "commonjs",
+  "description": "Nested package marker: the vendored qrcode sources are CommonJS, while the outer bundle is ESM."
+}

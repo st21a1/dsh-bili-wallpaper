@@ -1,0 +1,73 @@
+{
+  "name": "dsh-bili-wallpaper",
+  "version": "0.1.1",
+  "description": "Play a Bilibili live room or video behind the DeepSeek Harness Web GUI. Scan-login with your own account, paste a live-room link or video URL, pick the quality tier — with adjustable blur, scrim and panel opacity.",
+  "type": "module",
+  "engines": {
+    "node": ">=22.12.0",
+    "dsh": "^0.2.0-rc.1"
+  },
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "icon": "./icon.svg",
+  "files": [
+    "index.js",
+    "client.js",
+    "cordis.patch.yml",
+    "locale/en.json",
+    "locale/zh.json",
+    "icon.svg",
+    "assets/icon.svg",
+    "README.md",
+    "LICENSE",
+    "NOTICE.md",
+    "vendor/hls.light.min.js",
+    "vendor/hls.js.LICENSE",
+    "vendor/dijkstrajs/dijkstra.js",
+    "vendor/dijkstrajs/LICENSE.md",
+    "vendor/dijkstrajs/package.json",
+    "vendor/qrcode/LICENSE",
+    "vendor/qrcode/package.json",
+    "vendor/qrcode/lib/**"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-ui-settings",
+        "@deepseek-ai/dsh-client-ui-settings-plugins"
+      ]
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/st21a1/dsh-bili-wallpaper.git"
+  },
+  "homepage": "https://github.com/st21a1/dsh-bili-wallpaper#readme",
+  "bugs": {
+    "url": "https://github.com/st21a1/dsh-bili-wallpaper/issues"
+  },
+  "author": "st21a1",
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "bilibili",
+    "live",
+    "video",
+    "wallpaper",
+    "background",
+    "scan-login"
+  ],
+  "license": "MIT"
+}
