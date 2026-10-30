@@ -41,29 +41,32 @@
 [![npm](https://img.shields.io/npm/v/dsh-bili-wallpaper.svg)](https://www.npmjs.com/package/dsh-bili-wallpaper)
 [![license](https://img.shields.io/npm/l/dsh-bili-wallpaper.svg)](LICENSE)
 
-### 方式一：从 npm 装（最省事）
+### 方式一：从 npm 装（最省事，推荐）
 
 ```powershell
-dsh plugin --profile desktop add dsh-bili-wallpaper
+dsh plugin --profile web add dsh-bili-wallpaper
 ```
 
 包在 [npmjs.com/package/dsh-bili-wallpaper](https://www.npmjs.com/package/dsh-bili-wallpaper)，运行时依赖已随包 vendor，**不会**再拉任何 npm 包。
 
+> 桌面版把 `--profile web` 换成 `--profile desktop`（桌面版默认 profile 叫 `desktop`）。
+
 ### 方式二：从 GitHub 装
 
 ```powershell
-# 1. 克隆到任意目录
+# 一条命令，直接从仓库装
+dsh plugin --profile web add github:st21a1/dsh-bili-wallpaper
+
+# 或者先克隆再装
 git clone https://github.com/st21a1/dsh-bili-wallpaper.git
 cd dsh-bili-wallpaper
-
-# 2. 装进你的 profile（desktop 是桌面版默认 profile）
-dsh plugin --profile desktop add .
+dsh plugin --profile web add .
 ```
 
 ### 方式三：直接用目录路径装
 
 ```powershell
-dsh plugin --profile desktop add "C:\path\to\dsh-bili-wallpaper"
+dsh plugin --profile web add "C:\path\to\dsh-bili-wallpaper"
 ```
 
 ### 方式四：在 Harness 里让 Agent 装
