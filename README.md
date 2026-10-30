@@ -5,7 +5,7 @@
 > A DeepSeek Harness plugin that plays a Bilibili live room or video behind the chat UI. Scan-login with your own account, paste a live/video link, pick the quality tier — with adjustable blur, scrim and panel opacity.
 
 <p align="center">
-  <img src="assets/icon.svg" width="96" alt="dsh-bili-wallpaper icon">
+  <img src="https://raw.githubusercontent.com/st21a1/dsh-bili-wallpaper/main/assets/icon.svg" width="96" alt="dsh-bili-wallpaper icon">
 </p>
 
 ---
@@ -28,17 +28,28 @@
 设置页在 **设置 → B站背景**，五块：开启背景 / 来源 / 清晰度 / 画面 / 账号。
 
 <p align="center">
-  <img src="assets/screenshot-settings.png" width="640" alt="设置页：来源、清晰度、画面与扫码登录">
+  <img src="https://raw.githubusercontent.com/st21a1/dsh-bili-wallpaper/main/assets/screenshot-settings.png" width="640" alt="设置页：来源、清晰度、画面与扫码登录">
 </p>
 <p align="center">
-  <img src="assets/screenshot-background.png" width="640" alt="直播画面作为聊天背景的效果">
+  <img src="https://raw.githubusercontent.com/st21a1/dsh-bili-wallpaper/main/assets/screenshot-background.png" width="640" alt="直播画面作为聊天背景的效果">
 </p>
 
 ---
 
 ## 安装
 
-### 方式一：从 GitHub 装（推荐）
+[![npm](https://img.shields.io/npm/v/dsh-bili-wallpaper.svg)](https://www.npmjs.com/package/dsh-bili-wallpaper)
+[![license](https://img.shields.io/npm/l/dsh-bili-wallpaper.svg)](LICENSE)
+
+### 方式一：从 npm 装（最省事）
+
+```powershell
+dsh plugin --profile desktop add dsh-bili-wallpaper
+```
+
+包在 [npmjs.com/package/dsh-bili-wallpaper](https://www.npmjs.com/package/dsh-bili-wallpaper)，运行时依赖已随包 vendor，**不会**再拉任何 npm 包。
+
+### 方式二：从 GitHub 装
 
 ```powershell
 # 1. 克隆到任意目录
@@ -49,15 +60,15 @@ cd dsh-bili-wallpaper
 dsh plugin --profile desktop add .
 ```
 
-### 方式二：直接用目录路径装
+### 方式三：直接用目录路径装
 
 ```powershell
 dsh plugin --profile desktop add "C:\path\to\dsh-bili-wallpaper"
 ```
 
-### 方式三：在 Harness 里让 Agent 装
+### 方式四：在 Harness 里让 Agent 装
 
-把仓库地址交给 Agent，说「把这个插件装进当前 profile」即可（它会调用 `plugin_manager install_bundle`）。
+把仓库地址或包名交给 Agent，说「把这个插件装进当前 profile」即可（它会调用 `plugin_manager install_bundle`）。
 
 ### 装完要做的事
 

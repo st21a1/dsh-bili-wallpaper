@@ -69,5 +69,9 @@
     "background",
     "scan-login"
   ],
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
   "license": "MIT"
 }
