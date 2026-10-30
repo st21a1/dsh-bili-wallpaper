@@ -27,17 +27,12 @@
 
 设置页在 **设置 → B站背景**，五块：开启背景 / 来源 / 清晰度 / 画面 / 账号。
 
-> 📷 **截图待补**：`assets/screenshot-settings.png`（设置页）与 `assets/screenshot-background.png`（背景效果）。
-> 补图后把下面这段注释解开即可。
-
-<!--
 <p align="center">
   <img src="assets/screenshot-settings.png" width="640" alt="设置页：来源、清晰度、画面与扫码登录">
 </p>
 <p align="center">
   <img src="assets/screenshot-background.png" width="640" alt="直播画面作为聊天背景的效果">
 </p>
--->
 
 ---
 
