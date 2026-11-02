@@ -52,6 +52,21 @@ window.__ModuleLoader__.load({
         volume: '音量',
         rate: '播放速度',
         pauseHidden: '切到后台时暂停',
+        playback: '播放',
+        endAction: '播完之后',
+        endLoop: '重头循环（同一P）',
+        endNext: '播下一P，最后一P停住',
+        endStop: '停在最后一帧',
+        endHide: '关闭背景',
+        resume: '记住进度',
+        resumeHint: '再打开同一个视频时，从上次的位置继续（同一P）。',
+        progress: '进度',
+        jump: '跳到',
+        nextPart: '下一P',
+        prevPart: '上一P',
+        part: '分P',
+        ended: '播完了',
+        resumedAt: '已从上次位置继续',
         account: '账号',
         loggedIn: '已登录',
         loggedOut: '未登录',
@@ -98,6 +113,21 @@ window.__ModuleLoader__.load({
         volume: 'Volume',
         rate: 'Playback rate',
         pauseHidden: 'Pause when hidden',
+        playback: 'Playback',
+        endAction: 'When it ends',
+        endLoop: 'Loop this part',
+        endNext: 'Next part; stop at the last one',
+        endStop: 'Stop on the last frame',
+        endHide: 'Turn the background off',
+        resume: 'Remember position',
+        resumeHint: 'Reopening the same video continues from where you left off (same part).',
+        progress: 'Position',
+        jump: 'Jump to',
+        nextPart: 'Next part',
+        prevPart: 'Previous part',
+        part: 'Part',
+        ended: 'Finished',
+        resumedAt: 'Resumed from last position',
         account: 'Account',
         loggedIn: 'Signed in',
         loggedOut: 'Not signed in',
@@ -254,6 +284,22 @@ body[${ACTIVE_ATTR}] .dshDesktopFrame { background-color: transparent !important
     const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v))
     const pct = (v) => Math.round(Number(v) * 100) + '%'
 
+    /** 进度存储的键：按视频 + 分P 区分，单P视频与多P视频互不干扰 */
+    const progressKey = (media) => {
+      if (!media || media.kind !== 'video' || !media.bvid) return ''
+      const p = Number(media.page) || 1
+      return p > 1 ? `video:${media.bvid}:p${p}` : `video:${media.bvid}`
+    }
+
+    /** 秒数 → mm:ss / h:mm:ss */
+    const hms = (sec) => {
+      const s = Math.max(0, Math.floor(Number(sec) || 0))
+      const h = Math.floor(s / 3600)
+      const m = Math.floor((s % 3600) / 60)
+      const ss = String(s % 60).padStart(2, '0')
+      return h ? `${h}:${String(m).padStart(2, '0')}:${ss}` : `${m}:${ss}`
+    }
+
     const DEFAULT_CFG = {
       enabled: false,
       source: '',
@@ -267,6 +313,9 @@ body[${ACTIVE_ATTR}] .dshDesktopFrame { background-color: transparent !important
       volume: 0.6,
       playbackRate: 1,
       pauseOnHidden: true,
+      page: 1,
+      endAction: 'next',
+      resume: true,
     }
 
     async function api(path, options) {
@@ -328,6 +377,9 @@ body[${ACTIVE_ATTR}] .dshDesktopFrame { background-color: transparent !important
       let lastCfg = null
       let onFatal = null
       let onBlocked = null
+      let onEnded = null
+      let onProgress = null
+      let onResumed = null
 
       const ready = () => document.body && document.documentElement
 
@@ -511,7 +563,8 @@ body[${ACTIVE_ATTR}] .dshDesktopFrame { background-color: transparent !important
         video.setAttribute('playsinline', '')
         video.setAttribute('webkit-playsinline', '')
         video.autoplay = true
-        video.loop = media.kind === 'video'
+        // 不再无条件 loop：播完之后做什么由 cfg.endAction 决定（见 handleEnded）
+        video.loop = media.kind === 'video' && cfg.endAction === 'loop'
         video.muted = Boolean(cfg.muted)
         try {
           video.volume = clamp(cfg.volume, 0, 1)
@@ -532,6 +585,27 @@ body[${ACTIVE_ATTR}] .dshDesktopFrame { background-color: transparent !important
         video.addEventListener('error', () => {
           if (layer) delete layer.dataset.on
         })
+        // 播完：交给外部决定（下一P / 停住 / 关背景）
+        video.addEventListener('ended', () => {
+          if (video) video.dataset.ended = '1'
+          if (typeof onEnded === 'function') onEnded()
+        })
+        // 进度回写：节流到 3 秒一次，暂停 / 关闭时立即写
+        let lastReport = 0
+        const report = (force) => {
+          if (!video || !lastReport) return
+          const now = Date.now()
+          if (!force && now - lastReport < 3000) return
+          lastReport = now
+          if (typeof onProgress === 'function') {
+            onProgress({ at: video.currentTime, duration: Number.isFinite(video.duration) ? video.duration : 0 })
+          }
+        }
+        video.addEventListener('playing', () => {
+          lastReport = Date.now()
+        })
+        video.addEventListener('timeupdate', () => report(false))
+        video.addEventListener('pause', () => report(true))
         layer.appendChild(video)
 
         if (media.live && HlsCtor && HlsCtor.isSupported && HlsCtor.isSupported()) {
@@ -576,6 +650,27 @@ body[${ACTIVE_ATTR}] .dshDesktopFrame { background-color: transparent !important
         } else {
           video.src = media.url
         }
+
+        // 续播：元数据就绪后跳到上次的位置（同一P）。
+        // 太靠末尾（剩不到 15 秒或 2%）就不跳了，否则一打开就"播完"了。
+        const resumeAt = Number(cfg.__resumeAt) || 0
+        if (resumeAt > 0 && media.kind === 'video') {
+          const seekOnce = () => {
+            if (!video) return
+            const dur = Number.isFinite(video.duration) ? video.duration : 0
+            if (!dur) return
+            const nearEnd = dur - resumeAt < Math.max(15, dur * 0.02)
+            if (resumeAt < dur && !nearEnd) {
+              try {
+                video.currentTime = resumeAt
+                if (typeof onResumed === 'function') onResumed(resumeAt)
+              } catch {
+                /* 忽略 */
+              }
+            }
+          }
+          video.addEventListener('loadedmetadata', seekOnce, { once: true })
+        }
         tryPlay()
       }
 
@@ -595,6 +690,50 @@ body[${ACTIVE_ATTR}] .dshDesktopFrame { background-color: transparent !important
         unmute() {
           if (!video) return
           video.muted = false
+          tryPlay()
+        },
+        /** 播完时回调 */
+        onEnded(fn) {
+          onEnded = fn
+        },
+        /** 播放进度回调（已节流） */
+        onProgress(fn) {
+          onProgress = fn
+        },
+        /** 从上次位置继续时回调，用于给用户一个提示 */
+        onResumed(fn) {
+          onResumed = fn
+        },
+        /* ── 下面几个是给 UI 用的远程控制 ── */
+        seek(seconds) {
+          if (!video) return false
+          const dur = Number.isFinite(video.duration) ? video.duration : 0
+          const at = Math.max(0, Math.min(Number(seconds) || 0, dur || Number(seconds) || 0))
+          try {
+            video.currentTime = at
+            return true
+          } catch {
+            return false
+          }
+        },
+        getPosition() {
+          if (!video) return null
+          return {
+            at: video.currentTime || 0,
+            duration: Number.isFinite(video.duration) ? video.duration : 0,
+            paused: video.paused,
+            ended: video.ended,
+          }
+        },
+        pause() {
+          if (!video) return
+          try {
+            video.pause()
+          } catch {
+            /* ignore */
+          }
+        },
+        play() {
           tryPlay()
         },
         /** cfg 变了就整体对齐；media 变了就换源 */
@@ -653,7 +792,18 @@ body[${ACTIVE_ATTR}] .dshDesktopFrame { background-color: transparent !important
 
     function createStore(layer) {
       const listeners = new Set()
-      let snapshot = { cfg: { ...DEFAULT_CFG }, media: null, account: {}, busy: '', note: null, loaded: false, conflict: false, audioBlocked: false }
+      let snapshot = {
+        cfg: { ...DEFAULT_CFG },
+        media: null,
+        account: {},
+        busy: '',
+        note: null,
+        loaded: false,
+        conflict: false,
+        audioBlocked: false,
+        position: null,
+        resumedAt: 0,
+      }
       let timer = 0
       let disposed = false
 
@@ -713,8 +863,26 @@ body[${ACTIVE_ATTR}] .dshDesktopFrame { background-color: transparent !important
             media,
             loaded: true,
             busy: '',
+            position: null,
             ...(quiet ? {} : { note: null }),
           })
+          // 续播：先把上次的位置塞进 cfg 的私有字段，交给 showVideo 用
+          if (media && media.kind === 'video' && state.config.resume) {
+            const key = progressKey(media)
+            try {
+              const p = key ? await api('/progress?key=' + encodeURIComponent(key)) : null
+              if (disposed) return
+              if (p && p.progress && p.progress.at > 0) {
+                snapshot.cfg = { ...snapshot.cfg, __resumeAt: p.progress.at }
+              } else {
+                snapshot.cfg = { ...snapshot.cfg, __resumeAt: 0 }
+              }
+            } catch {
+              snapshot.cfg = { ...snapshot.cfg, __resumeAt: 0 }
+            }
+          } else {
+            snapshot.cfg = { ...snapshot.cfg, __resumeAt: 0 }
+          }
           paint({ reload: Boolean(force) })
           schedule()
         } catch (err) {
@@ -731,7 +899,7 @@ body[${ACTIVE_ATTR}] .dshDesktopFrame { background-color: transparent !important
           const r = await api('/config', { method: 'POST', body: JSON.stringify(body) })
           if (disposed) return
           const next = { ...snapshot.cfg, ...r.config }
-          const needReload = 'source' in body || 'quality' in body || 'enabled' in body
+          const needReload = 'source' in body || 'quality' in body || 'enabled' in body || 'page' in body
           set({ cfg: next, note: opts && opts.quiet ? null : { tone: 'good', code: 'saved' } })
           paint({ reload: false })
           if (needReload) await refresh(true, true)
@@ -769,6 +937,97 @@ body[${ACTIVE_ATTR}] .dshDesktopFrame { background-color: transparent !important
       // 浏览器拦了有声自动播放：静音先放着，但状态栏要能看见「点一下开声音」
       layer.onBlocked(() => set({ audioBlocked: true }))
 
+      /* ── 进度记忆 ────────────────────────────────────────────────────── */
+
+      let saveTimer = 0
+      const flushProgress = (pos) => {
+        const media = snapshot.media
+        if (!media || media.kind !== 'video' || !snapshot.cfg.resume) return
+        const key = progressKey(media)
+        if (!key || !pos) return
+        if (saveTimer) window.clearTimeout(saveTimer)
+        saveTimer = window.setTimeout(() => {
+          saveTimer = 0
+          api('/progress', {
+            method: 'POST',
+            body: JSON.stringify({ key, at: pos.at, duration: pos.duration }),
+          }).catch(() => {})
+        }, 800)
+      }
+
+      layer.onProgress((pos) => {
+        set({ position: pos })
+        flushProgress(pos)
+      })
+
+      layer.onResumed((at) => {
+        set({ resumedAt: at, note: { tone: 'good', code: 'resumedAt' } })
+      })
+
+      /* ── 播完之后做什么 ──────────────────────────────────────────────── */
+
+      let ending = false
+      layer.onEnded(async () => {
+        if (ending) return
+        ending = true
+        try {
+          const cfg = snapshot.cfg
+          const media = snapshot.media
+          // 播完就把这一P的进度清掉，否则下次打开会"续播"到片尾
+          const key = media ? progressKey(media) : ''
+          if (key) {
+            api('/progress', { method: 'POST', body: JSON.stringify({ key, clear: true }) }).catch(() => {})
+          }
+
+          const action = cfg.endAction || 'next'
+          if (action === 'loop') {
+            layer.seek(0)
+            layer.play()
+            return
+          }
+          if (action === 'hide') {
+            await patch({ enabled: false }, { quiet: true })
+            return
+          }
+          if (action === 'stop') {
+            set({ note: { tone: 'good', code: 'ended' } })
+            return
+          }
+          // next：有多P就下一P，最后一P就停住
+          const parts = media && Array.isArray(media.parts) ? media.parts : []
+          const cur = media ? Number(media.page) || 1 : 1
+          const next = parts.find((p) => Number(p.page) > cur)
+          if (next) {
+            set({ note: { tone: 'good', text: `→ P${next.page} ${next.title || ''}`.trim() } })
+            await patch({ page: Number(next.page) }, { quiet: true })
+            await refresh(true, true)
+            layer.play()
+          } else {
+            set({ note: { tone: 'good', code: 'ended' } })
+          }
+        } catch (err) {
+          set({ note: { tone: 'bad', text: String(err.message || err) } })
+        } finally {
+          ending = false
+        }
+      })
+
+      /** 跳到指定秒数（进度条用） */
+      const seek = (seconds) => {
+        const ok = layer.seek(seconds)
+        if (ok) set({ position: layer.getPosition() })
+        return ok
+      }
+
+      /** 切到指定分P */
+      const goPage = async (page) => {
+        const n = Number(page)
+        if (!Number.isFinite(n) || n < 1) return
+        await patch({ page: n }, { quiet: true })
+        await refresh(true, true)
+        layer.play()
+      }
+
       /** 用户点「打开声音」：既改配置（下次也出声），也立刻放行当前这路流 */
       const unmute = async () => {
         set({ audioBlocked: false })
@@ -787,6 +1046,8 @@ body[${ACTIVE_ATTR}] .dshDesktopFrame { background-color: transparent !important
         patch,
         set,
         unmute,
+        seek,
+        goPage,
       }
     }
 
@@ -927,6 +1188,151 @@ body[${ACTIVE_ATTR}] .dshDesktopFrame { background-color: transparent !important
             onChange: (e) => slide(key, Number(e.target.value)),
           }),
           h('div', { 'data-bw-val': '' }, format ? format(shown) : String(shown)),
+        )
+      }
+
+      /* ── 播放区：只对视频显示进度条与分P ── */
+      const playbackBlock = () => {
+        const isVideo = media && media.kind === 'video'
+        const parts = (isVideo && Array.isArray(media.parts) && media.parts.length > 1) ? media.parts : []
+        const curPage = media ? Number(media.page) || 1 : 1
+        const pos = snap.position || null
+        const at = pos ? pos.at : 0
+        const dur = pos && pos.duration > 0 ? pos.duration : (media ? Number(media.duration) || 0 : 0)
+
+        return h(
+          'div',
+          { 'data-bw-sec': '' },
+          h('div', { 'data-bw-h': '' }, t('playback')),
+
+          /* 进度条：只有视频且拿得到时长才显示 */
+          isVideo && dur > 0
+            ? h(
+                'div',
+                { 'data-bw-row': '', 'data-bw-seekrow': '' },
+                h('div', { 'data-bw-label': '', style: { minWidth: 96 } }, t('progress')),
+                h('input', {
+                  'data-bw-slider': '',
+                  'data-bw-seek': '',
+                  type: 'range',
+                  min: 0,
+                  max: Math.max(1, Math.floor(dur)),
+                  step: 1,
+                  // 拖动中优先用本地值，否则 timeupdate 会把滑块拽回去
+                  value: Math.floor('__seek' in drag ? drag.__seek : at),
+                  onChange: (e) => {
+                    const v = Number(e.target.value)
+                    setDrag((prev) => ({ ...prev, __seek: v }))
+                    store.seek(v) // 边拖边看画面，拖动手感更直接
+                  },
+                  onMouseUp: (e) => {
+                    const v = Number(e.target.value)
+                    store.seek(v)
+                    setDrag((prev) => {
+                      const next = { ...prev }
+                      delete next.__seek
+                      return next
+                    })
+                  },
+                  onKeyUp: (e) => {
+                    const v = Number(e.target.value)
+                    store.seek(v)
+                    setDrag((prev) => {
+                      const next = { ...prev }
+                      delete next.__seek
+                      return next
+                    })
+                  },
+                  onTouchEnd: (e) => {
+                    const v = Number(e.target.value)
+                    store.seek(v)
+                    setDrag((prev) => {
+                      const next = { ...prev }
+                      delete next.__seek
+                      return next
+                    })
+                  },
+                }),
+                h(
+                  'div',
+                  { 'data-bw-val': '' },
+                  `${hms('__seek' in drag ? drag.__seek : at)} / ${hms(dur)}`,
+                ),
+              )
+            : null,
+
+          /* 分P 切换 */
+          parts.length
+            ? h(
+                'div',
+                { 'data-bw-row': '' },
+                h('div', { 'data-bw-label': '', style: { minWidth: 96 } }, t('part')),
+                h(
+                  'button',
+                  {
+                    'data-bw-btn': '',
+                    disabled: !parts.some((p) => Number(p.page) < curPage),
+                    onClick: () => {
+                      const prev = parts.filter((p) => Number(p.page) < curPage).pop()
+                      if (prev) store.goPage(prev.page)
+                    },
+                  },
+                  t('prevPart'),
+                ),
+                h(
+                  'select',
+                  {
+                    'data-bw-select': '',
+                    value: String(curPage),
+                    onChange: (e) => store.goPage(Number(e.target.value)),
+                  },
+                  parts.map((p) =>
+                    h('option', { key: String(p.page), value: String(p.page) },
+                      `P${p.page} ${p.title || ''}`.trim()),
+                  ),
+                ),
+                h(
+                  'button',
+                  {
+                    'data-bw-btn': '',
+                    disabled: !parts.some((p) => Number(p.page) > curPage),
+                    onClick: () => {
+                      const next = parts.find((p) => Number(p.page) > curPage)
+                      if (next) store.goPage(next.page)
+                    },
+                  },
+                  t('nextPart'),
+                ),
+              )
+            : null,
+
+          /* 播完之后 */
+          h(
+            'div',
+            { 'data-bw-row': '' },
+            h('div', { 'data-bw-label': '', style: { minWidth: 96 } }, t('endAction')),
+            h(
+              'select',
+              {
+                'data-bw-select': '',
+                value: cfg.endAction || 'next',
+                onChange: (e) => store.patch({ endAction: e.target.value }, { quiet: true }),
+              },
+              h('option', { value: 'next' }, t('endNext')),
+              h('option', { value: 'loop' }, t('endLoop')),
+              h('option', { value: 'stop' }, t('endStop')),
+              h('option', { value: 'hide' }, t('endHide')),
+            ),
+          ),
+
+          /* 记住进度 */
+          h(
+            'div',
+            { 'data-bw-row': '' },
+            h('div', { 'data-bw-label': '', style: { flex: 1 } }, t('resume')),
+            sw(cfg.resume !== false, () => store.patch({ resume: !(cfg.resume !== false) }, { quiet: true })),
+          ),
+          h('div', { 'data-bw-note': '' }, t('resumeHint')),
         )
       }
 
@@ -1090,6 +1496,9 @@ body[${ACTIVE_ATTR}] .dshDesktopFrame { background-color: transparent !important
             sw(cfg.pauseOnHidden, () => store.patch({ pauseOnHidden: !cfg.pauseOnHidden }, { quiet: true })),
           ),
         ),
+
+        /* ── 播放：进度条 / 分P / 播完之后 ────────────────────────────── */
+        playbackBlock(),
 
         h(
           'div',

@@ -50,7 +50,19 @@ const DEFAULTS = {
   volume: 0.6,
   playbackRate: 1,
   pauseOnHidden: true,
-  configVersion: 2,
+  /** 当前分P（1 起）。只有多P视频有意义，单P视频恒为 1。 */
+  page: 1,
+  /**
+   * 当前视频播完之后做什么：
+   *   loop      重头再来（0.1.x 的行为，保留为可选）
+   *   next      播下一P；已经是最后一P就停住（默认）
+   *   stop      播完就停在最后一帧
+   *   hide      播完关掉背景（恢复宿主原生外观）
+   */
+  endAction: 'next',
+  /** 记住进度：再次打开同一个视频从上次位置继续 */
+  resume: true,
+  configVersion: 3,
 }
 
 /**
@@ -59,7 +71,9 @@ const DEFAULTS = {
  * 那个 `muted: true` 是插件替用户做的决定，不是他的选择 —— 升级时一次性翻成 false。
  * 之后用户自己再静音，configVersion 已经是 2，不会再被动。
  */
-const CONFIG_VERSION = 2
+const CONFIG_VERSION = 3
+
+const END_ACTIONS = new Set(['loop', 'next', 'stop', 'hide'])
 
 const NUM_RANGE = {
   blur: [0, 40],
@@ -85,12 +99,17 @@ export function normalizeConfig(input) {
   if (typeof src.fit === 'string') out.fit = src.fit === 'contain' ? 'contain' : 'cover'
   if (typeof src.pauseOnHidden === 'boolean') out.pauseOnHidden = src.pauseOnHidden
   if (typeof src.muted === 'boolean') out.muted = src.muted
+  if (typeof src.resume === 'boolean') out.resume = src.resume
+  if (typeof src.endAction === 'string' && END_ACTIONS.has(src.endAction)) out.endAction = src.endAction
 
-  const legacyMute = (Number(src.configVersion) || 1) < CONFIG_VERSION && src.muted === true
+  const version = Number(src.configVersion) || 1
+  const legacyMute = version < CONFIG_VERSION && src.muted === true
   if (legacyMute) out.muted = false
 
   const qn = Number(src.quality)
   if (Number.isFinite(qn) && qn >= 0) out.quality = Math.round(qn)
+  const pg = Number(src.page)
+  if (Number.isFinite(pg) && pg >= 1) out.page = Math.round(pg)
   for (const key of Object.keys(NUM_RANGE)) {
     if (key in src) {
       const v = clampNumber(key, src[key])
@@ -355,19 +374,20 @@ const VIDEO_QN_LABEL = {
   6: '240P',
 }
 
-/** 用户输入 → { kind:'live', roomId } | { kind:'video', bvid|aid, page } | null */
+/** 用户输入 → { kind:'live', roomId } | { kind:'video', bvid|aid, page, pageFromUrl } | null */
 function parseSource(rawInput) {
   const raw = String(rawInput || '').trim()
   if (!raw) return null
+  const pageMatch = /[?&]p=(\d+)/.exec(raw)
+  const pageFromUrl = Boolean(pageMatch)
+  const pageOfUrl = pageFromUrl ? Math.max(1, Number(pageMatch[1])) : 0
   const bv = /(BV[0-9A-Za-z]{10})/.exec(raw)
   if (bv) {
-    const p = /[?&]p=(\d+)/.exec(raw)
-    return { kind: 'video', bvid: bv[1], page: p ? Math.max(1, Number(p[1])) : 1 }
+    return { kind: 'video', bvid: bv[1], page: pageFromUrl ? pageOfUrl : 1, pageFromUrl }
   }
   const av = /\/video\/av(\d+)/i.exec(raw) || /^av(\d+)$/i.exec(raw)
   if (av) {
-    const p = /[?&]p=(\d+)/.exec(raw)
-    return { kind: 'video', aid: Number(av[1]), page: p ? Math.max(1, Number(p[1])) : 1 }
+    return { kind: 'video', aid: Number(av[1]), page: pageFromUrl ? pageOfUrl : 1, pageFromUrl }
   }
   const live = /live\.bilibili\.com\/(?:blanc\/|h5\/)?(\d+)/i.exec(raw)
   if (live) return { kind: 'live', roomId: Number(live[1]) }
@@ -504,15 +524,23 @@ async function resolveVideo(parsed, wantedQn, cred) {
     page: page.page || 1,
     pages: pages.length,
     part: page.part || '',
+    /** 分P列表：客户端用它算「下一P」，只带必要字段 */
+    parts: pages.map((p, i) => ({
+      page: p.page || i + 1,
+      cid: p.cid,
+      title: p.part || `P${p.page || i + 1}`,
+      duration: p.duration || 0,
+    })),
     title: d.title || page.part || d.bvid,
     owner: d.owner?.name || '',
     cover: d.pic || '',
-    duration: d.duration || 0,
+    duration: page.duration || d.duration || 0,
+    totalDuration: d.duration || 0,
     url: durl[0].url,
     quality: Number(pd.quality) || qualities[0].qn,
     qualities,
     segmented: durl.length > 1,
-    note: durl.length > 1 ? '这条视频被 B 站切成多段，当前只循环第一段' : '',
+    note: durl.length > 1 ? '这条视频被 B 站切成多段，当前只播放第一段' : '',
     refreshAfter: 25 * 60 * 1000,
   }
 }
@@ -720,6 +748,7 @@ export function apply(ctx) {
   const dir = stateDirOf()
   const configFile = join(dir, 'config.json')
   const credentialFile = join(dir, 'bili_credential.json')
+  const progressFile = join(dir, 'progress.json')
 
   let config = normalizeConfig(readJson(configFile, {}))
   let credential = readJson(credentialFile, null)
@@ -779,6 +808,11 @@ export function apply(ctx) {
     }
     if (!parsed) {
       return { ok: false, error: '认不出这个地址：填直播链接 / 直播间号，或者视频链接 / BV 号' }
+    }
+
+    // 分P 以配置里的 page 为准（地址里写了 ?p=N 时仍尊重地址，配置在切P时同步）
+    if (parsed.kind === 'video' && config.page > 1 && !parsed.pageFromUrl) {
+      parsed.page = config.page
     }
 
     const result =
@@ -857,12 +891,19 @@ export function apply(ctx) {
 
     if (method === 'GET' && (path === '/state' || path === '/')) {
       const account = await getAccount()
+      const media = resolveCache // 可能为 null；客户端仍会用 /resolve 拉最新
+      let savedProgress = null
+      if (media && media.ok && media.kind === 'video' && media.bvid) {
+        const all = readJson(progressFile, {})
+        savedProgress = all[`video:${media.bvid}`] || null
+      }
       return sendJson(res, 200, {
         ok: true,
-        version: '0.1.3',
+        version: '0.2.0',
         home: dir,
         config,
         account,
+        progress: savedProgress,
         loginPending: Boolean(loginKey),
       })
     }
@@ -873,6 +914,39 @@ export function apply(ctx) {
       for (const key of Object.keys(DEFAULTS)) if (key in body) patch[key] = body[key]
       const next = saveConfig(patch)
       return sendJson(res, 200, { ok: true, config: next })
+    }
+
+    /* 播放进度：客户端定期上报，切换视频 / 重启后能接着看 */
+    if (method === 'GET' && path === '/progress') {
+      const key = url.searchParams.get('key') || ''
+      const all = readJson(progressFile, {})
+      return sendJson(res, 200, { ok: true, progress: key ? all[key] || null : all })
+    }
+
+    if (method === 'POST' && path === '/progress') {
+      const body = await readJsonBody(req)
+      const key = String(body.key || '').slice(0, 80)
+      if (!key) return sendJson(res, 200, { ok: false, error: '缺少 key' })
+      const all = readJson(progressFile, {})
+      const at = Number(body.at)
+      if (body.clear === true) {
+        delete all[key]
+        try {
+          writeJson(progressFile, all)
+        } catch {
+          /* 忽略 */
+        }
+        return sendJson(res, 200, { ok: true, cleared: true })
+      }
+      if (!Number.isFinite(at) || at < 0) return sendJson(res, 200, { ok: false, error: '进度无效' })
+      all[key] = { at: Math.round(at), duration: Math.round(Number(body.duration) || 0), at_ms: Date.now() }
+      try {
+        writeJson(progressFile, all)
+      } catch (err) {
+        log(`写进度失败：${err?.message || err}`)
+        return sendJson(res, 200, { ok: false, error: '写入失败' })
+      }
+      return sendJson(res, 200, { ok: true, progress: all[key] })
     }
 
     if (method === 'POST' && path === '/login/start') {

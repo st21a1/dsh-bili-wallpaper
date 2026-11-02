@@ -22,14 +22,16 @@ const check = (label, ok, detail) => {
 /* ① 老配置迁移 */
 const legacy = normalizeConfig({ enabled: true, muted: true, volume: 0.5, source: 'x' })
 check('0.1.x 的 muted:true 迁移成出声', legacy.muted === false, JSON.stringify({ muted: legacy.muted }))
-check('迁移后留下 configVersion', legacy.configVersion === 2)
+// 迁移后写的是当前 CONFIG_VERSION（会随版本上升，这里只要求 >= 2 且存在）
+check('迁移后留下 configVersion', typeof legacy.configVersion === 'number' && legacy.configVersion >= 2, String(legacy.configVersion))
 
-/* ② 用户升级后自己静音，不被翻回来 */
-const own = normalizeConfig({ muted: true, volume: 0.6, configVersion: 2 })
-check('用户自己静音（v2）保持不变', own.muted === true)
+/* ② 用户升级后自己静音，不被翻回来（用当前版本号，避免硬编码过时） */
+const CURRENT = legacy.configVersion
+const own = normalizeConfig({ muted: true, volume: 0.6, configVersion: CURRENT })
+check('用户自己静音（已是当前版本）保持不变', own.muted === true)
 
 /* ③ 取消静音但音量为 0 → 补默认音量 */
-const zero = normalizeConfig({ muted: false, volume: 0, configVersion: 2 })
+const zero = normalizeConfig({ muted: false, volume: 0, configVersion: CURRENT })
 check('没静音但音量为 0 时补默认音量', zero.volume > 0, 'volume=' + zero.volume)
 
 /* ④ 真实配置文件的迁移落盘 */
@@ -68,7 +70,11 @@ const st = await (await fetch(origin + '/api/bili-wallpaper/state', { headers: H
 check('启动即迁移旧配置（state 里 muted=false）', st.config.muted === false, JSON.stringify({ muted: st.config.muted, volume: st.config.volume }))
 
 const onDisk = JSON.parse(await (await import('node:fs')).promises.readFile(join(dir, 'config.json'), 'utf8'))
-check('迁移结果写回了 config.json', onDisk.muted === false && onDisk.configVersion === 2)
+check(
+  '迁移结果写回了 config.json',
+  onDisk.muted === false && typeof onDisk.configVersion === 'number' && onDisk.configVersion >= 2,
+  JSON.stringify({ muted: onDisk.muted, configVersion: onDisk.configVersion }),
+)
 
 /* ⑤ 直播选 ts */
 const list = await (
