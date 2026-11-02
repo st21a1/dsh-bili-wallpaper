@@ -11,6 +11,27 @@
 
 ---
 
+## [0.2.2] - 2026-11-02
+
+修掉「拖动进度条松手后弹回开场」。
+
+### 修复
+
+- **进度条松手即弹回**：松手时立刻删掉本地拖动值 `__seek`，滑块 `value` 回落到
+  `snap.position.at`。但 `seek` 是异步的（`currentTime` → `seeking` → `seeked` →
+  `timeupdate`），那一刻 `at` 仍是旧值，于是滑块弹回原位置。
+  现在松手后**保留** `__seek`，等 `seeked` 事件回报真实位置再清理；
+  另有 1.5s 兜底，防止 `seeked` 不触发（目标位置与当前相同时会这样）导致滑块卡住。
+- **切P 后滑块卡在旧位置**：换源时本地拖动态没有重置，新片段的滑块会停在上一P 拖到的位置。
+  现在 `refresh` 检测到 media 变化就通知 UI 清空。
+
+### 测试
+
+- `test/test-seek-ui.mjs`：进度条状态机测试，含旧实现的缺陷对照，以及兜底与切P 重置场景。
+- `test/test-seek-e2e.mjs`：真 Host + 真 client，验证 seek 后位置正确、不重建 video、仍在播放。
+
+---
+
 ## [0.2.1] - 2026-11-02
 
 修掉「选了播下一P，实际却在重播当前P」。
@@ -150,7 +171,8 @@
 - 浏览器拦截自动播放时：先静音放起来并在页面提示「打开声音」，点一下即恢复，
   不再悄悄静音。
 
-[Unreleased]: https://github.com/st21a1/dsh-bili-wallpaper/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/st21a1/dsh-bili-wallpaper/compare/v0.2.2...HEAD
+[0.2.2]: https://github.com/st21a1/dsh-bili-wallpaper/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/st21a1/dsh-bili-wallpaper/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/st21a1/dsh-bili-wallpaper/compare/v0.1.3...v0.2.0
 [0.1.3]: https://github.com/st21a1/dsh-bili-wallpaper/compare/v0.1.2...v0.1.3

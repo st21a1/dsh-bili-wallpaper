@@ -380,6 +380,7 @@ body[${ACTIVE_ATTR}] .dshDesktopFrame { background-color: transparent !important
       let onEnded = null
       let onProgress = null
       let onResumed = null
+      let onSeekedCb = null
 
       const ready = () => document.body && document.documentElement
 
@@ -590,6 +591,18 @@ body[${ACTIVE_ATTR}] .dshDesktopFrame { background-color: transparent !important
           if (video) video.dataset.ended = '1'
           if (typeof onEnded === 'function') onEnded()
         })
+        // seek 生效：把真实位置回报给 store（UI 靠它清掉 __seek，避免滑块弹回）
+        video.addEventListener('seeked', () => {
+          if (!video) return
+          if (typeof onSeekedCb === 'function') {
+            onSeekedCb({
+              at: video.currentTime || 0,
+              duration: Number.isFinite(video.duration) ? video.duration : 0,
+              paused: video.paused,
+              ended: video.ended,
+            })
+          }
+        })
         // 进度回写：节流到 3 秒一次，暂停 / 关闭时立即写
         let lastReport = 0
         const report = (force) => {
@@ -713,6 +726,10 @@ body[${ACTIVE_ATTR}] .dshDesktopFrame { background-color: transparent !important
         onResumed(fn) {
           onResumed = fn
         },
+        /** seek 生效（video 触发 seeked）时回调 */
+        onSeeked(fn) {
+          onSeekedCb = fn
+        },
         /* ── 下面几个是给 UI 用的远程控制 ── */
         seek(seconds) {
           if (!video) return false
@@ -812,9 +829,13 @@ body[${ACTIVE_ATTR}] .dshDesktopFrame { background-color: transparent !important
         audioBlocked: false,
         position: null,
         resumedAt: 0,
+        seeking: false,
       }
       let timer = 0
       let disposed = false
+      const seekedListeners = new Set()
+      const mediaChangedListeners = new Set()
+      let previousMedia = null
 
       const emit = () => {
         for (const fn of Array.from(listeners)) {
@@ -892,8 +913,22 @@ body[${ACTIVE_ATTR}] .dshDesktopFrame { background-color: transparent !important
           } else {
             snapshot.cfg = { ...snapshot.cfg, __resumeAt: 0 }
           }
-          paint({ reload: Boolean(force) })
-          schedule()
+          // 换了一路源（切P / 换视频 / 关闭背景）就通知 UI 重置本地拖动态，
+                // 否则残留的 __seek 会让新片段的滑块卡在旧位置。
+                const prevUrl = previousMedia && previousMedia.url
+                const nextUrl = media && media.url
+                if (prevUrl !== nextUrl) {
+                  for (const fn of Array.from(mediaChangedListeners)) {
+                    try {
+                      fn(media)
+                    } catch {
+                      /* ignore */
+                    }
+                  }
+                }
+                previousMedia = media
+                paint({ reload: Boolean(force) })
+                schedule()
         } catch (err) {
           if (disposed) return
           set({ busy: '', note: { tone: 'bad', text: String(err.message || err) } })
@@ -945,6 +980,18 @@ body[${ACTIVE_ATTR}] .dshDesktopFrame { background-color: transparent !important
 
       // 浏览器拦了有声自动播放：静音先放着，但状态栏要能看见「点一下开声音」
       layer.onBlocked(() => set({ audioBlocked: true }))
+
+      // seek 真正生效后：更新 position、清 seeking 标记、通知 UI 可以收起 __seek
+      layer.onSeeked((pos) => {
+        set({ position: pos, seeking: false })
+        for (const fn of Array.from(seekedListeners)) {
+          try {
+            fn(pos)
+          } catch {
+            /* ignore */
+          }
+        }
+      })
 
       /* ── 进度记忆 ────────────────────────────────────────────────────── */
 
@@ -1037,9 +1084,27 @@ body[${ACTIVE_ATTR}] .dshDesktopFrame { background-color: transparent !important
 
       /** 跳到指定秒数（进度条用） */
       const seek = (seconds) => {
-        const ok = layer.seek(seconds)
-        if (ok) set({ position: layer.getPosition() })
-        return ok
+        const target = Number(seconds) || 0
+        const ok = layer.seek(target)
+        if (!ok) return false
+        // 先把目标位置写进 position，UI 立刻跟上（不用等 seeked）
+        set({
+          position: { ...(layer.getPosition() || {}), at: target, duration: snapshot.position?.duration || 0 },
+          seeking: true,
+        })
+        return true
+      }
+
+      /** seek 生效后回调（UI 用它清理 __seek，避免滑块弹回） */
+      const onSeeked = (fn) => {
+        seekedListeners.add(fn)
+        return () => seekedListeners.delete(fn)
+      }
+
+      /** 换了一路 media（切P / 换源 / 关闭背景）时回调，UI 用它重置本地拖动态 */
+      const onMediaChanged = (fn) => {
+        mediaChangedListeners.add(fn)
+        return () => mediaChangedListeners.delete(fn)
       }
 
       /** 切到指定分P */
@@ -1070,6 +1135,8 @@ body[${ACTIVE_ATTR}] .dshDesktopFrame { background-color: transparent !important
         set,
         unmute,
         seek,
+        onSeeked,
+        onMediaChanged,
         goPage,
       }
     }
@@ -1085,6 +1152,7 @@ body[${ACTIVE_ATTR}] .dshDesktopFrame { background-color: transparent !important
       const [drag, setDrag] = useState({})
       const pollTimer = useRef(0)
       const saveTimer = useRef(0)
+      const seekFallback = useRef(0)
       const pending = useRef({})
       const mounted = useRef(true)
 
@@ -1102,16 +1170,69 @@ body[${ACTIVE_ATTR}] .dshDesktopFrame { background-color: transparent !important
         }, 220)
       }
 
+      /**
+       * 进度条松手：发起 seek，并保留 __seek 直到它真正生效。
+       *
+       * 不能在这里立刻删 __seek：此时 video.currentTime 还没变，
+       * snap.position.at 仍是旧值，删掉会让滑块弹回开场。
+       * 由 store 在 seek 生效后回调 onSeekDone，再由 commitSeekUI 清理。
+       */
+      const commitSeekUI = (seconds) => {
+        const v = Math.round(Number(seconds) || 0)
+        setDrag((prev) => ({ ...prev, __seek: v }))
+        store.seek(v)
+        // 兜底：某些情况（目标与当前位置相同、或 seeked 没触发）不会回调，
+        // 留一个超时把 __seek 收掉，否则滑块会一直卡在用户拖的位置。
+        if (typeof window !== 'undefined') {
+          if (seekFallback.current) window.clearTimeout(seekFallback.current)
+          seekFallback.current = window.setTimeout(() => {
+            seekFallback.current = 0
+            setDrag((prev) => {
+              if (!('__seek' in prev)) return prev
+              const next = { ...prev }
+              delete next.__seek
+              return next
+            })
+          }, 1500)
+        }
+      }
+
       useEffect(() => {
         mounted.current = true
         const unsub = store.subscribe(() => {
           if (mounted.current) forceRender((n) => n + 1)
         })
+        // seek 生效后收起 __seek，滑块交还给真实播放位置
+        const unsubSeeked = store.onSeeked(() => {
+          if (seekFallback.current) {
+            window.clearTimeout(seekFallback.current)
+            seekFallback.current = 0
+          }
+          if (!mounted.current) return
+          setDrag((prev) => {
+            if (!('__seek' in prev)) return prev
+            const next = { ...prev }
+            delete next.__seek
+            return next
+          })
+        })
+        // 切P / 换源：本地拖动态必须清掉，否则新片段的滑块会卡在旧位置
+        const unsubMedia = store.onMediaChanged(() => {
+          if (seekFallback.current) {
+            window.clearTimeout(seekFallback.current)
+            seekFallback.current = 0
+          }
+          if (!mounted.current) return
+          setDrag({})
+        })
         return () => {
           mounted.current = false
           unsub()
+          unsubSeeked()
+          unsubMedia()
           if (pollTimer.current) window.clearTimeout(pollTimer.current)
           if (saveTimer.current) window.clearTimeout(saveTimer.current)
+          if (seekFallback.current) window.clearTimeout(seekFallback.current)
         }
       }, [store])
 
@@ -1241,40 +1362,24 @@ body[${ACTIVE_ATTR}] .dshDesktopFrame { background-color: transparent !important
                   min: 0,
                   max: Math.max(1, Math.floor(dur)),
                   step: 1,
-                  // 拖动中优先用本地值，否则 timeupdate 会把滑块拽回去
+                  /*
+                   * 滑块位置优先用 __seek：
+                   *   · 拖动中 —— 必须跟着手，不能被 timeupdate 拽回去
+                   *   · 松手后 —— 仍要保留，直到 seek 真正生效
+                   * 松手那一刻立刻删掉 __seek 会让 value 回落到 snap.position.at，
+                   * 而 seek 是异步的（currentTime → seeking → seeked → timeupdate），
+                   * 这个窗口里 at 还是旧值 ⇒ 滑块"弹回开场"。这是 0.2.1 的 bug。
+                   */
                   value: Math.floor('__seek' in drag ? drag.__seek : at),
                   onChange: (e) => {
                     const v = Number(e.target.value)
                     setDrag((prev) => ({ ...prev, __seek: v }))
                     store.seek(v) // 边拖边看画面，拖动手感更直接
                   },
-                  onMouseUp: (e) => {
-                    const v = Number(e.target.value)
-                    store.seek(v)
-                    setDrag((prev) => {
-                      const next = { ...prev }
-                      delete next.__seek
-                      return next
-                    })
-                  },
-                  onKeyUp: (e) => {
-                    const v = Number(e.target.value)
-                    store.seek(v)
-                    setDrag((prev) => {
-                      const next = { ...prev }
-                      delete next.__seek
-                      return next
-                    })
-                  },
-                  onTouchEnd: (e) => {
-                    const v = Number(e.target.value)
-                    store.seek(v)
-                    setDrag((prev) => {
-                      const next = { ...prev }
-                      delete next.__seek
-                      return next
-                    })
-                  },
+                  // 松手：seek 到位后由 store 回调 commitSeek 清掉 __seek（见下面 commitSeekUI）
+                  onMouseUp: (e) => commitSeekUI(Number(e.target.value)),
+                  onKeyUp: (e) => commitSeekUI(Number(e.target.value)),
+                  onTouchEnd: (e) => commitSeekUI(Number(e.target.value)),
                 }),
                 h(
                   'div',
