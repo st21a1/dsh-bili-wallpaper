@@ -232,6 +232,11 @@ test/               离线自测
 
 ---
 
+## 更新日志
+
+每个版本改了什么、修了哪些 bug，见 [CHANGELOG.md](CHANGELOG.md) 与
+[GitHub Releases](https://github.com/st21a1/dsh-bili-wallpaper/releases)。
+
 ## 许可证
 
 [MIT](LICENSE) © 2026 st21a1
