@@ -11,6 +11,32 @@
 
 ---
 
+## [0.2.1] - 2026-11-02
+
+修掉「选了播下一P，实际却在重播当前P」。
+
+### 修复
+
+- **`next` 分支重复 refresh**：`patch({page})` 内部已经 `await refresh(true)`，
+  之后又 `await refresh(true)` 了一次，导致连续两次拆掉并重建 `<video>`，
+  刚启动的新P 播放被打断，观感上就是「回到当前P 开头」。现在只换源一次。
+- **切P 时进度串台**：切P 后旧 `<video>` 仍会零星触发 `pause` / `timeupdate`，
+  而 `flushProgress` 读的是「当前 media」，于是旧P 的秒数被写进了新P 的进度记录。
+  现在进度上报会带上自己所属的 `media.url` / `page` / `bvid`，身份不一致直接丢弃。
+
+### 改进
+
+- 媒体卡片显式显示 **`P2/11 · 分P标题`**。多P 录播相邻两P 的画面往往几乎一样，
+  以前没有任何地方能确认「到底切没切」，现在一眼可见。
+- 播完切P 的提示改为 `播完 P1 → 接着播 P2 · 标题`，写明从哪一P 到哪一P。
+
+### 测试
+
+- `test/test-next-part.mjs`：端到端断言「触发一次 `ended` 只新建 **1** 个 `<video>`」，
+  这正是原缺陷的直接探针；同时检查新源已播放、后端 page 已切、播完的P 进度被清除。
+
+---
+
 ## [0.2.0] - 2026-11-02
 
 视频不再只会「无限循环第一P」——现在可以播下一P、拖进度、接着上次看。
@@ -124,7 +150,8 @@
 - 浏览器拦截自动播放时：先静音放起来并在页面提示「打开声音」，点一下即恢复，
   不再悄悄静音。
 
-[Unreleased]: https://github.com/st21a1/dsh-bili-wallpaper/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/st21a1/dsh-bili-wallpaper/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/st21a1/dsh-bili-wallpaper/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/st21a1/dsh-bili-wallpaper/compare/v0.1.3...v0.2.0
 [0.1.3]: https://github.com/st21a1/dsh-bili-wallpaper/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/st21a1/dsh-bili-wallpaper/compare/v0.1.1...v0.1.2

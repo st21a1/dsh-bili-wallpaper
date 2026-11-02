@@ -592,7 +592,16 @@ body[${ACTIVE_ATTR}] .dshDesktopFrame { background-color: transparent !important
           if (!force && now - lastReport < 3000) return
           lastReport = now
           if (typeof onProgress === 'function') {
-            onProgress({ at: video.currentTime, duration: Number.isFinite(video.duration) ? video.duration : 0 })
+            // 带上「这条 video 属于哪一路 media」：切P 后旧 video 仍可能触发
+            // pause / timeupdate，store 会拿这个身份比对，不匹配就丢弃，
+            // 否则旧P 的位置会被写进新P 的进度记录。
+            onProgress({
+              at: video.currentTime,
+              duration: Number.isFinite(video.duration) ? video.duration : 0,
+              mediaUrl: media.url,
+              page: media.page,
+              bvid: media.bvid,
+            })
           }
         }
         video.addEventListener('playing', () => {
@@ -937,8 +946,16 @@ body[${ACTIVE_ATTR}] .dshDesktopFrame { background-color: transparent !important
       const flushProgress = (pos) => {
         const media = snapshot.media
         if (!media || media.kind !== 'video' || !snapshot.cfg.resume) return
+        if (!pos) return
+        // 身份校验：这条进度必须属于「当前正在播的那一路 media」。
+        // 切P / 换源后旧 video 还会零星触发 pause、timeupdate，
+        // 放任它们写入会把旧P 的位置记到新P 头上（实测踩到过）。
+        if (pos.mediaUrl && media.url && pos.mediaUrl !== media.url) return
+        if (pos.page != null && media.page != null && Number(pos.page) !== Number(media.page)) return
+        if (pos.bvid && media.bvid && pos.bvid !== media.bvid) return
+
         const key = progressKey(media)
-        if (!key || !pos) return
+        if (!key) return
         if (saveTimer) window.clearTimeout(saveTimer)
         saveTimer = window.setTimeout(() => {
           saveTimer = 0
@@ -992,9 +1009,15 @@ body[${ACTIVE_ATTR}] .dshDesktopFrame { background-color: transparent !important
           const cur = media ? Number(media.page) || 1 : 1
           const next = parts.find((p) => Number(p.page) > cur)
           if (next) {
-            set({ note: { tone: 'good', text: `→ P${next.page} ${next.title || ''}`.trim() } })
+            set({
+              note: {
+                tone: 'good',
+                text: `播完 P${cur} → 接着播 P${next.page}${next.title ? ' · ' + next.title : ''}`,
+              },
+            })
+            // patch({page}) 内部已经 await refresh(true)，这里不要再 refresh 一次：
+            // 连续两次 refresh 会把刚建好的 video 拆掉重建，播放被打断。
             await patch({ page: Number(next.page) }, { quiet: true })
-            await refresh(true, true)
             layer.play()
           } else {
             set({ note: { tone: 'good', code: 'ended' } })
@@ -1351,7 +1374,14 @@ body[${ACTIVE_ATTR}] .dshDesktopFrame { background-color: transparent !important
               h(
                 'div',
                 { 'data-bw-note': '' },
-                [media.owner ? String(media.owner) : '', media.ok ? t('quality') + ' ' + String(media.quality || '') : '']
+                [
+                  // 多P 视频把「当前第几P」显式写出来，否则切P后画面几乎一样，看不出切没切
+                  media.kind === 'video' && media.pages > 1
+                    ? `P${media.page || 1}/${media.pages}${media.part ? ' · ' + media.part : ''}`
+                    : '',
+                  media.owner ? String(media.owner) : '',
+                  media.ok ? t('quality') + ' ' + String(media.quality || '') : '',
+                ]
                   .filter(Boolean)
                   .join(' · '),
               ),
