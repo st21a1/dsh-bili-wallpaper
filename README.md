@@ -1,5 +1,7 @@
 # dsh-bili-wallpaper
 
+[English](README.en.md) · **简体中文**
+
 把 **B 站直播间实时画面** 或 **任意视频** 当作 DeepSeek Harness Web GUI 的背景。扫码登录你自己的 B 站账号 → 粘一个直播 / 视频地址 → 选清晰度，画面就在聊天窗口背后播放。
 
 > A DeepSeek Harness plugin that plays a Bilibili live room or video behind the chat UI. Scan-login with your own account, paste a live/video link, pick the quality tier — with adjustable blur, scrim and panel opacity.
@@ -170,14 +172,20 @@ dsh plugin --profile desktop remove dsh-bili-wallpaper
 ## 开发
 
 ```powershell
-node build.mjs               # 把 hls.js 内联进 client.js（改完 client.src.js 必须跑）
-node test/test-client.mjs    # 假 window 里跑一遍注册，确认 slot 与 hls 清理
-node test/test-hls-inline.mjs# 确认内联的 hls.js 真的挂上 globalThis.Hls
-node test/test-audio.mjs     # 声音回归：配置迁移 / 音量兜底 / 直播必须选 ts
-node test/test-host.mjs      # 假 ctx 起 Host，真打 B 站接口与代理
+node build.mjs                     # 把 hls.js 内联进 client.js（改完 client.src.js 必须跑）
+node test/test-client.mjs          # 假 window 里跑一遍注册，确认 slot 与 hls 清理
+node test/test-hls-inline.mjs      # 确认内联的 hls.js 真的挂上 globalThis.Hls
+node test/test-audio.mjs           # 声音回归：配置迁移 / 音量兜底 / 直播必须选 ts
+node test/test-host.mjs            # 假 ctx 起 Host，真打 B 站接口与代理
+node test/test-absolute-media-url.mjs  # 媒体地址必须是绝对 http://，且跨源可取、签名仍生效
+node test/test-playback.mjs        # 分P / 进度读写 / 键隔离（打真实接口）
+node test/test-next-part.mjs       # 播完只换源一次（不多重建 video）
+node test/test-seek-ui.mjs         # 进度条状态机：松手不回弹、切P 重置
+node test/test-docs-bilingual.mjs  # 中英双语文档：编码、互链、章节与版本一致
 ```
 
 `test/test-host.mjs` 会用临时 `DSH_HOME`，不碰真实配置和凭证。
+完整清单见 [`test/`](test/)，共 17 个套件。
 
 ### 结构
 

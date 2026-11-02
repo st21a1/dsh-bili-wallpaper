@@ -653,12 +653,25 @@ async function handleProxy(req, res, url) {
     /mpegurl/i.test(contentType) || /\.m3u8(\?|$)/i.test(parsed.pathname + parsed.search)
 
   if (!upstream.ok && upstream.status !== 206) {
+    /*
+     * 416（Range Not Satisfiable）必须**原样**透传。
+     *
+     * 浏览器加载视频时会向文件末尾附近发探测 Range；越界时上游回 416，
+     * 这是它理解的正常语义。若我们把它裹成 502「网关错误」，
+     * Chrome 会判定整个媒体不可 seek —— seekable 归零，拖进度条视频不跳。
+     * 同类需要原样透传的还有 401/403/404/405/429。
+     */
+    const passthrough = new Set([401, 403, 404, 405, 416, 429])
+    const status = passthrough.has(upstream.status) ? upstream.status : 502
     const head = {
       'content-type': contentType || 'text/plain',
       'cache-control': 'no-store',
+      'accept-ranges': 'bytes',
       'x-upstream-status': String(upstream.status),
     }
-    res.writeHead(upstream.status === 403 || upstream.status === 404 ? upstream.status : 502, head)
+    const cr0 = upstream.headers.get('content-range')
+    if (cr0) head['content-range'] = cr0
+    res.writeHead(status, head)
     try {
       const text = await upstream.text()
       res.end(text.slice(0, 400))
@@ -690,13 +703,58 @@ async function handleProxy(req, res, url) {
     'content-type': contentType || 'application/octet-stream',
     'cache-control': 'no-store',
     'access-control-allow-origin': '*',
-    'accept-ranges': upstream.headers.get('accept-ranges') || 'bytes',
+    'accept-ranges': 'bytes',
   }
-  const len = upstream.headers.get('content-length')
-  if (len) outHeaders['content-length'] = len
+
   const cr = upstream.headers.get('content-range')
   if (cr) outHeaders['content-range'] = cr
+
+  /*
+   * Content-Length 必须尽量给出来。
+   *
+   * B 站 CDN 对超大文件（十几小时的录播、几百 MB）经常用 chunked 传输，
+   * 此时上游没有 content-length。若照旧不回长度，浏览器收到的是一个
+   * 「无确定长度」的 206：视频能顺序播放、也会缓冲，但 seekable 会停在
+   * [0, 0]，给 currentTime 赋值被静默忽略 —— 表现就是「拖进度条视频不跳」。
+   * 实测现场：buffered=[0,159] 而 seekable=[0,0]，同时 content-length=null。
+   *
+   * 长度按优先级取：上游 content-length → 从 content-range 的 a-b 推算。
+   */
+  const upstreamLen = upstream.headers.get('content-length')
+  if (upstreamLen) {
+    outHeaders['content-length'] = upstreamLen
+  } else if (cr) {
+    const range = /bytes\s+(\d+)-(\d+)\//i.exec(cr)
+    if (range) outHeaders['content-length'] = String(Number(range[2]) - Number(range[1]) + 1)
+  }
+
+  /*
+   * 上游忽略 Range、回了一整份 200 时，绝不能把 200 + Content-Range 一起丢给浏览器：
+   * 那是不合法的组合，浏览器会判定「服务端不会做 Range」，于是 seekable 归零。
+   * 这种情况退回「不支持跳转的普通 200」，并把 Range 相关头全部丢掉，
+   * 让浏览器至少能正常顺序播放，而不是拿到自相矛盾的响应。
+   */
+  const upstreamPartial = upstream.status === 206
+  if (req.headers.range && !upstreamPartial) {
+    delete outHeaders['content-range']
+    // 这是整份文件，长度只有在确实知道时才声明
+    const total = upstream.headers.get('content-length')
+    if (total) outHeaders['content-length'] = total
+    else delete outHeaders['content-length']
+  }
+
   res.writeHead(upstream.status === 206 ? 206 : 200, outHeaders)
+
+  // HEAD 只回头，不回体（浏览器用它探测可 seek 性）
+  if (req.method === 'HEAD') {
+    try {
+      upstream.body?.cancel?.()
+    } catch {
+      /* ignore */
+    }
+    res.end()
+    return
+  }
 
   if (!upstream.body) {
     res.end()
@@ -796,6 +854,26 @@ export function apply(ctx) {
     return accountCache
   }
 
+  /**
+   * 媒体地址必须是**绝对 http://**。
+   *
+   * DSH 桌面版用自定义协议加载页面（页面源是 dsh-app://app），相对路径会被
+   * 解析成 dsh-app://app/api/…。Chromium 的媒体栈对非 http(s) scheme 的
+   * Range 支持不完整：能顺序播放、也会缓冲，但 seekable 恒为 [0,0]，
+   * 给 currentTime 赋值被静默忽略 —— 表现为「拖进度条视频不跳」。
+   * 所以这里用 webServer.getOrigin() 拼成 http://127.0.0.1:<port>/…，
+   * 让媒体走标准 HTTP，浏览器才会把它当作可随机访问的资源。
+   */
+  const mediaOrigin = () => {
+    try {
+      const o = ctx.webServer?.getOrigin?.()
+      if (o) return String(o).replace(/\/+$/, '')
+    } catch {
+      /* 拿不到就退回相对路径 */
+    }
+    return ''
+  }
+
   const resolveSource = async (force = false) => {
     if (!force && resolveCache && Date.now() - resolveAt < 5000) return resolveCache
     const raw = config.source
@@ -821,7 +899,9 @@ export function apply(ctx) {
         : await resolveVideo(parsed, config.quality, credential)
 
     if (result.ok && result.url) {
-      result.url = proxyUrl(result.url, result.kind === 'video' ? 'video' : 'live')
+      const rel = proxyUrl(result.url, result.kind === 'video' ? 'video' : 'live')
+      const origin = mediaOrigin()
+      result.url = origin ? origin + rel : rel
       result.resolvedAt = Date.now()
     }
     resolveCache = result
@@ -899,7 +979,7 @@ export function apply(ctx) {
       }
       return sendJson(res, 200, {
         ok: true,
-        version: '0.2.2',
+        version: '0.3.0',
         home: dir,
         config,
         account,
@@ -1035,7 +1115,12 @@ export function apply(ctx) {
       }
     }
 
-    if (method === 'GET' && path === '/proxy') {
+    /*
+     * HEAD 也要接：浏览器加载媒体前常先发 HEAD 探测「多大 / 支不支持 Range」。
+     * 之前只放行 GET，HEAD 落到 404，浏览器就判定该资源不可随机访问 ——
+     * 表现是能顺序播放但 seekable=[0,0]，拖进度条视频不跳。
+     */
+    if ((method === 'GET' || method === 'HEAD') && path === '/proxy') {
       return handleProxy(req, res, url)
     }
 
@@ -1048,6 +1133,40 @@ export function apply(ctx) {
         kind: 'prefix',
         path: API_PREFIX,
         handler: async (req, res) => {
+          const isProxy = (req.url || '').startsWith(API_PREFIX + '/proxy')
+
+          /*
+           * /proxy 是给 <video> 用的「媒体」端点，和 JSON 接口的信任模型不同：
+           *  · 桌面版页面源是 dsh-app://app，请求本机 http 端口时 Origin 就是
+           *    dsh-app://app，按同源规则一定不匹配 —— 但它确实是本应用自己。
+           *  · 媒体元素不携带我们的认证 cookie，也不能自定义头，所以 DSH 的
+           *    信任栅栏也会把它判为「未认证」。这不是漏洞，是 <video> 的固有限制。
+           *  它的安全边界改为：只监听 127.0.0.1 + URL 带 HMAC 签名 + 目标域名
+           *  白名单（handleProxy 本身就会验签并校验域名）。
+           */
+          if (isProxy) {
+            const host = String(req.headers.host || '')
+            if (host && !/^(127\.0\.0\.1|localhost|\[::1\])(:\d+)?$/i.test(host)) {
+              sendJson(res, 403, { ok: false, error: '只接受本机请求' })
+              return
+            }
+            res.setHeader('access-control-allow-origin', '*')
+            res.setHeader('access-control-allow-headers', 'range,if-range')
+            res.setHeader('access-control-expose-headers', 'content-range,content-length,accept-ranges')
+            if ((req.method || 'GET') === 'OPTIONS') {
+              res.writeHead(204, { 'access-control-max-age': '600' })
+              res.end()
+              return
+            }
+            try {
+              await handle(req, res, new URL(req.url || '/', 'http://127.0.0.1'))
+            } catch (err) {
+              if (!res.headersSent) sendJson(res, 500, { ok: false, error: String(err?.message || err) })
+              else res.end()
+            }
+            return
+          }
+
           if (fenceReject(req, res)) return
           if (!sameOriginOk(req)) {
             sendJson(res, 403, { ok: false, error: '只接受本机同源请求' })

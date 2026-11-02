@@ -1,6 +1,6 @@
 {
   "name": "dsh-bili-wallpaper",
-  "version": "0.2.2",
+  "version": "0.3.0",
   "description": "Play a Bilibili live room or video behind the DeepSeek Harness Web GUI. Scan-login with your own account, paste a live-room link or video URL, pick the quality tier — with adjustable blur, scrim and panel opacity.",
   "type": "module",
   "engines": {
@@ -24,7 +24,9 @@
     "icon.svg",
     "assets/icon.svg",
     "README.md",
+    "README.en.md",
     "CHANGELOG.md",
+    "CHANGELOG.en.md",
     "LICENSE",
     "NOTICE.md",
     "vendor/hls.light.min.js",

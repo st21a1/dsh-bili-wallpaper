@@ -1,5 +1,7 @@
 # Changelog
 
+[English](CHANGELOG.en.md) · **简体中文**
+
 本项目的所有重要变更都记录在这里。
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
@@ -8,6 +10,52 @@
 ## [Unreleased]
 
 暂无。
+
+---
+
+## [0.3.0] - 2026-11-02
+
+修掉「拖进度条完全没反应，视频不跳」。
+
+### 修复
+
+- **媒体走了自定义协议，浏览器因此拒绝随机访问。** 桌面版页面源是
+  `dsh-app://app`，相对路径 `/api/bili-wallpaper/proxy…` 被解析成
+  `dsh-app://app/api/…`。Chromium 的媒体栈对非 http(s) scheme 不做随机访问：
+  视频能播、能缓冲（`readyState = 4`），但 `seekable` 恒为 `[0, 0]`，
+  给 `currentTime` 赋值被静默忽略。
+  现在媒体地址改为用 `webServer.getOrigin()` 拼出的绝对 `http://127.0.0.1:<port>/…`，
+  `<video>` 走标准 HTTP。实测前后对比：`seekable` `[0, 0]` → `[0, 3604.23]`，
+  `currentTime = 600` 能读回 `600.24`。
+- **`/proxy` 拒绝非同源请求。** 源为 `dsh-app://app` 的页面请求
+  `http://127.0.0.1:<port>` 永远不满足同源规则，而 `<video>` 又无法携带认证
+  cookie。媒体端点现在只要求 `Host` 是回环地址；真正的边界仍是 HMAC 签名 +
+  B 站 CDN 域名白名单（两者都保留且仍有测试覆盖）。
+- **媒体端点缺 CORS 头。** 补上 `Access-Control-Allow-Origin`、
+  `Allow-Headers: range,if-range`、`Expose-Headers: content-range,content-length,accept-ranges`，
+  以及 `OPTIONS` 预检应答。
+
+### 新增
+
+- **`/proxy` 支持 `HEAD`。** 浏览器播放前常先用 `HEAD` 探测媒体资源。之前只路由
+  `GET`，`HEAD` 落到 `404`，浏览器据此判定资源不可随机访问。现在 `HEAD`
+  返回完整头（`Content-Length`、`Accept-Ranges`、`Content-Type`）且不带 body。
+- **`Content-Length` 回填。** 当 CDN 用分块传输（无 `Content-Length`）应答
+  Range 请求时，代理从 `Content-Range`（`bytes a-b/total` → `b-a+1`）推算出长度。
+  大体积录播会走到这条路径。
+
+### 变更
+
+- Range 相关的上游状态码（`401`、`403`、`404`、`405`、`416`、`429`）改为**原样透传**，
+  不再一律折叠成 `502`。尤其是 `416`——它是越界探测的正常答复，裹成 `502`
+  会让 Chrome 认为整个媒体不可 seek。
+
+### 测试
+
+- `test/test-absolute-media-url.mjs`：媒体地址形态、跨源 Range 访问、`HEAD`，
+  以及篡改签名 / 非白名单域名仍被拒绝。
+- `test/test-head-request.mjs`、`test/test-416-passthrough.mjs`、
+  `test/test-content-length.mjs`：上面三项传输层修复。
 
 ---
 
@@ -171,7 +219,8 @@
 - 浏览器拦截自动播放时：先静音放起来并在页面提示「打开声音」，点一下即恢复，
   不再悄悄静音。
 
-[Unreleased]: https://github.com/st21a1/dsh-bili-wallpaper/compare/v0.2.2...HEAD
+[Unreleased]: https://github.com/st21a1/dsh-bili-wallpaper/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/st21a1/dsh-bili-wallpaper/compare/v0.2.2...v0.3.0
 [0.2.2]: https://github.com/st21a1/dsh-bili-wallpaper/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/st21a1/dsh-bili-wallpaper/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/st21a1/dsh-bili-wallpaper/compare/v0.1.3...v0.2.0
