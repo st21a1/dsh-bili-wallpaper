@@ -258,12 +258,21 @@ async function anonymousCookie() {
   return pluginBuvid3 ? `buvid3=${pluginBuvid3}` : ''
 }
 
+/**
+ * 登录后要带的 cookie。
+ *
+ * ⚠️ 刻意**不带 buvid3**：实测（2026-11）`SESSDATA + buvid3` 的组合会被 B 站
+ * 判为「同一账号 + 陌生设备指纹」，playurl 直接返回 -351；而同一次请求去掉
+ * buvid3 立刻 code=0。`SESSDATA` / `bili_jct` / `DedeUserID` 单独带都正常。
+ *
+ * buvid3 只在匿名请求里用（见 anonymousCookie）—— 那里它是加分项，
+ * 一旦叠上登录态就成了减分项。
+ */
 function cookieOf(cred) {
   if (!cred || !cred.sessdata) return ''
   const parts = [`SESSDATA=${cred.sessdata}`]
   if (cred.bili_jct) parts.push(`bili_jct=${cred.bili_jct}`)
   if (cred.dedeuserid) parts.push(`DedeUserID=${cred.dedeuserid}`)
-  if (cred.buvid3) parts.push(`buvid3=${cred.buvid3}`)
   return parts.join('; ')
 }
 
@@ -850,7 +859,7 @@ export function apply(ctx) {
       const account = await getAccount()
       return sendJson(res, 200, {
         ok: true,
-        version: '0.1.2',
+        version: '0.1.3',
         home: dir,
         config,
         account,
