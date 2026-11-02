@@ -154,17 +154,108 @@ function renderQrSvg(text) {
 
 /* ── B 站接口 ─────────────────────────────────────────────────────────────── */
 
-async function biliJson(url, { referer, cookie, timeout = 15000 } = {}) {
+/**
+ * 风控类错误码：这些不是「参数错了」，而是「你这次请求被怀疑是机器人」。
+ *   -351 受到神秘力量干扰（最常见）
+ *   -352 风控校验失败
+ *   -412 请求被拦截
+ *   -509 请求过于频繁
+ * 对它们值得等一下再试，也值得给用户一句能看懂的解释。
+ */
+const RISK_CONTROL_CODES = new Set([-351, -352, -412, -509])
+const RISK_CONTROL_HINT =
+  'B 站风控拦截（-351「受到神秘力量干扰」）。通常不是地址写错：常见原因是出口 IP 被限、短时间内请求过多，或未登录且缺少设备指纹。已自动重试；仍失败可稍等几分钟、换个网络，或在设置页扫码登录后再试。'
+
+class BiliApiError extends Error {
+  constructor(code, message, { risk = false, status = 0 } = {}) {
+    super(message)
+    this.name = 'BiliApiError'
+    this.code = code
+    this.risk = risk
+    this.status = status
+  }
+}
+
+const RISK_RETRY_DELAYS = [600, 1600, 3200] // 退避重试：总共最多 3 次
+
+/**
+ * 调 B 站接口。对风控码自动退避重试；普通业务错误（比如 -404 视频不存在）直接抛。
+ *
+ * `biliToken` 是插件自己的 buvid3（未登录也用），能在风控眼里更像正常客户端。
+ */
+async function biliJson(url, { referer, cookie, timeout = 15000, retries = RISK_RETRY_DELAYS.length } = {}) {
   const headers = { 'user-agent': UA }
   if (referer) headers.referer = referer
   if (cookie) headers.cookie = cookie
-  const res = await fetch(url, { headers, signal: AbortSignal.timeout(timeout) })
-  if (!res.ok) throw new Error(`B站接口 HTTP ${res.status}`)
-  const body = await res.json()
-  if (body && typeof body.code === 'number' && body.code !== 0) {
-    throw new Error(`B站接口 ${body.code}：${body.message || '未知错误'}`)
+
+  let lastErr = null
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    let res
+    try {
+      res = await fetch(url, { headers, signal: AbortSignal.timeout(timeout) })
+    } catch (err) {
+      // 网络层失败同样值得重试（这条链路经常抖）
+      lastErr = new BiliApiError(-1, `连不上 B 站接口：${err?.message || err}`)
+      if (attempt < retries) {
+        await new Promise((r) => setTimeout(r, RISK_RETRY_DELAYS[Math.min(attempt, RISK_RETRY_DELAYS.length - 1)]))
+        continue
+      }
+      throw lastErr
+    }
+
+    if (res.status === 412 || res.status === 429) {
+      lastErr = new BiliApiError(res.status, `B 站返回 HTTP ${res.status}`, { risk: true, status: res.status })
+      if (attempt < retries) {
+        await new Promise((r) => setTimeout(r, RISK_RETRY_DELAYS[Math.min(attempt, RISK_RETRY_DELAYS.length - 1)]))
+        continue
+      }
+      throw lastErr
+    }
+    if (!res.ok) throw new BiliApiError(res.status, `B站接口 HTTP ${res.status}`, { status: res.status })
+
+    let body
+    try {
+      body = await res.json()
+    } catch {
+      throw new BiliApiError(-2, 'B 站返回了无法解析的内容')
+    }
+
+    const code = body && typeof body.code === 'number' ? body.code : 0
+    if (code === 0) return body
+
+    const risk = RISK_CONTROL_CODES.has(code)
+    lastErr = new BiliApiError(code, `B站接口 ${code}：${body.message || '未知错误'}`, { risk })
+    if (risk && attempt < retries) {
+      await new Promise((r) => setTimeout(r, RISK_RETRY_DELAYS[Math.min(attempt, RISK_RETRY_DELAYS.length - 1)]))
+      continue
+    }
+    throw lastErr
   }
-  return body
+  throw lastErr
+}
+
+/** 把内部错误翻译成用户能看懂的一句话 */
+function explainBiliError(err) {
+  if (err && err.risk) return RISK_CONTROL_HINT
+  return String(err?.message || err)
+}
+
+/**
+ * 未登录时也要带的 cookie。
+ *
+ * B 站风控主要认设备指纹（buvid3）。未登录还裸着发请求，被 -351 拦的概率明显更高，
+ * 所以这里拿一次 finger/spi 的 b_3 并缓存在进程内，之后所有匿名请求都带上。
+ */
+async function anonymousCookie() {
+  if (!pluginBuvid3) {
+    try {
+      const j = await biliJson('https://api.bilibili.com/x/frontend/finger/spi')
+      if (j?.data?.b_3) pluginBuvid3 = j.data.b_3
+    } catch {
+      /* 拿不到就空着，请求照发 */
+    }
+  }
+  return pluginBuvid3 ? `buvid3=${pluginBuvid3}` : ''
 }
 
 function cookieOf(cred) {
@@ -189,11 +280,19 @@ function pickCookies(list) {
   return jar
 }
 
+let pluginBuvid3 = '' // 插件自己的设备指纹：未登录时也带上，降低被风控的概率
 async function ensureBuvid3(jar) {
   if (jar.buvid3) return jar
+  if (pluginBuvid3) {
+    jar.buvid3 = pluginBuvid3
+    return jar
+  }
   try {
     const j = await biliJson('https://api.bilibili.com/x/frontend/finger/spi')
-    if (j?.data?.b_3) jar.buvid3 = j.data.b_3
+    if (j?.data?.b_3) {
+      pluginBuvid3 = j.data.b_3
+      jar.buvid3 = pluginBuvid3
+    }
   } catch {
     /* 拿不到就空着，不影响登录 */
   }
@@ -281,8 +380,8 @@ async function expandShortLink(input) {
 }
 
 async function resolveLive(roomId, wantedQn, cred) {
-  const cookie = cookieOf(cred)
-  const info = await biliJson(`https://api.live.bilibili.com/room/v1/Room/get_info?room_id=${roomId}`)
+  const cookie = cookieOf(cred) || (await anonymousCookie())
+  const info = await biliJson(`https://api.live.bilibili.com/room/v1/Room/get_info?room_id=${roomId}`, { cookie })
   const data = info.data || {}
   if (!data.room_id) throw new Error('找不到这个直播间')
   const rid = data.room_id
@@ -354,7 +453,7 @@ async function resolveLive(roomId, wantedQn, cred) {
 }
 
 async function resolveVideo(parsed, wantedQn, cred) {
-  const cookie = cookieOf(cred)
+  const cookie = cookieOf(cred) || (await anonymousCookie())
   const query = parsed.bvid ? `bvid=${parsed.bvid}` : `aid=${parsed.aid}`
   const view = await biliJson(`https://api.bilibili.com/x/web-interface/view?${query}`, { cookie })
   const d = view.data || {}
@@ -751,7 +850,7 @@ export function apply(ctx) {
       const account = await getAccount()
       return sendJson(res, 200, {
         ok: true,
-        version: '0.1.1',
+        version: '0.1.2',
         home: dir,
         config,
         account,
@@ -844,7 +943,12 @@ export function apply(ctx) {
         const result = await resolveSource(force)
         return sendJson(res, 200, { ok: result.ok !== false, media: result, error: result.error || '', config })
       } catch (err) {
-        return sendJson(res, 200, { ok: false, error: String(err?.message || err) })
+        return sendJson(res, 200, {
+          ok: false,
+          error: explainBiliError(err),
+          code: typeof err?.code === 'number' ? err.code : 0,
+          risk: Boolean(err?.risk),
+        })
       }
     }
 
