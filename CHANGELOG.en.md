@@ -13,6 +13,49 @@ Nothing yet.
 
 ---
 
+## [0.3.1] - 2026-11-24
+
+Fixes "the sliders and switches in the settings page are the same colour as the
+background, so you cannot see them"; the README screenshots are now real captures of
+the running interface.
+
+### Fixed
+
+- **Slider fill and the switch's on-state rendered white, nearly invisible on dark
+  glass.** The host resolves `--dsw-alias-brand-primary` to `#f9fafb` (white) under the
+  glass theme, and the code used `var(--dsw-alias-brand-primary, #4f8cff)` — `#4f8cff`
+  is only a fallback, so it never applied once the host supplied a value. Slider fill,
+  switch on-state and primary buttons all turned white. The plugin now uses its own
+  accent (`--bw-accent: #4f8cff`) instead of the host token.
+- **The unfilled part of a slider was browser-default styling**, which disappears on a
+  transparent background. The track is now drawn explicitly
+  (`rgba(255,255,255,.22)` plus a border), covering both `::-webkit-slider-*` and
+  `::-moz-range-*`; the thumb is a solid blue dot with a white ring and a shadow, so it
+  reads on any background.
+- **The switch's off-state used `rgba(128,128,128,.42)` grey**, indistinguishable from
+  dark glass. It is now a visible light fill with a white outline; the on-state is blue.
+- Primary buttons were white-on-white for the same host-token reason; now blue with
+  white text.
+- The input focus border no longer follows the host brand colour either — it uses the
+  plugin accent plus a focus ring.
+
+### Documentation
+
+- Both README screenshots are replaced with **real captures of the running interface**:
+  the original-quality stream of `https://live.bilibili.com/213`, with the title, owner
+  id and three quality tiers exactly as the API returned them.
+- Screenshots are now cropped to the outer card's bounding box with margin around it, so
+  the rounded outline is fully visible; content that scrolls inside the settings panel
+  is captured in segments and stitched together.
+- Added `scripts/capture-screenshots.mjs` (drives a headless browser through the real UI)
+  and `scripts/probe-room.mjs` (checks whether a given live room resolves).
+
+### Tests
+
+- Both scripts fail loudly instead of continuing silently; all 17 test suites still pass.
+
+---
+
 ## [0.3.0] - 2026-11-02
 
 Fixes "dragging the seek bar does nothing — the video never jumps".
@@ -256,7 +299,8 @@ First release on npm and GitHub.
 - When the browser blocks autoplay: start muted, show an "turn sound on" hint in the page,
   and restore sound on one click — no more silent muting behind the user's back.
 
-[Unreleased]: https://github.com/st21a1/dsh-bili-wallpaper/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/st21a1/dsh-bili-wallpaper/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/st21a1/dsh-bili-wallpaper/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/st21a1/dsh-bili-wallpaper/compare/v0.2.2...v0.3.0
 [0.2.2]: https://github.com/st21a1/dsh-bili-wallpaper/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/st21a1/dsh-bili-wallpaper/compare/v0.2.0...v0.2.1

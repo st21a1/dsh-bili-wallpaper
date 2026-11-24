@@ -34,11 +34,14 @@
 设置页在 **设置 → B站背景**，五块：开启背景 / 来源 / 清晰度 / 画面 / 账号。
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/st21a1/dsh-bili-wallpaper/main/assets/screenshot-settings.png" width="640" alt="设置页：来源、清晰度、画面与扫码登录">
+  <img src="https://raw.githubusercontent.com/st21a1/dsh-bili-wallpaper/main/assets/screenshot-settings.png" width="640" alt="设置页：来源、清晰度、画面调节、播完动作与账号登录状态">
 </p>
 <p align="center">
-  <img src="https://raw.githubusercontent.com/st21a1/dsh-bili-wallpaper/main/assets/screenshot-background.png" width="640" alt="直播画面作为聊天背景的效果">
+  <img src="https://raw.githubusercontent.com/st21a1/dsh-bili-wallpaper/main/assets/screenshot-background.png" width="720" alt="直播间画面作为聊天背景：侧栏与气泡变成半透明玻璃面">
 </p>
+
+> 两张图都是真实运行界面截图：`https://live.bilibili.com/213` 的原画直播画面，
+> 面板上的标题、UP 主 ID 与三档清晰度均为接口真实返回。
 
 ---
 

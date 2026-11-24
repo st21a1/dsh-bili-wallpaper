@@ -51,10 +51,15 @@ for (const [label, needle] of mustHave) {
   check(`英文 README 含${label}`, enReadme.includes(needle))
 }
 
-/* 版本号一致 */
-check('package.json 版本为 0.3.0', pkg.version === '0.3.0', pkg.version)
-check('中文 CHANGELOG 有 0.3.0', zhLog.includes('## [0.3.0]'))
-check('英文 CHANGELOG 有 0.3.0', enLog.includes('## [0.3.0]'))
+/* 版本号一致：不写死版本，否则每次发版都要改测试 */
+check('package.json 版本形如 x.y.z', /^\d+\.\d+\.\d+$/.test(pkg.version), pkg.version)
+check(`中文 CHANGELOG 有 ${pkg.version}`, zhLog.includes(`## [${pkg.version}]`))
+check(`英文 CHANGELOG 有 ${pkg.version}`, enLog.includes(`## [${pkg.version}]`))
+check(
+  '两个 CHANGELOG 的最新版本与 package.json 一致',
+  (zhLog.match(/^## \[([\d.]+)\]/m) || [])[1] === pkg.version && (enLog.match(/^## \[([\d.]+)\]/m) || [])[1] === pkg.version,
+  `${pkg.version} / zh:${(zhLog.match(/^## \[([\d.]+)\]/m) || [])[1]} / en:${(enLog.match(/^## \[([\d.]+)\]/m) || [])[1]}`,
+)
 
 /* 版本条目数一致 */
 const zhVersions = (zhLog.match(/^## \[[\d.]+\]/gm) || []).map((s) => s.trim())

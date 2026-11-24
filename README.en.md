@@ -34,11 +34,15 @@ Play a **Bilibili live room** or **any video** as the background of the DeepSeek
 The settings page lives at **Settings → B站背景**. It has five blocks: enable / source / quality / picture / account.
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/st21a1/dsh-bili-wallpaper/main/assets/screenshot-settings.png" width="640" alt="Settings page: source, quality, picture and scan login">
+  <img src="https://raw.githubusercontent.com/st21a1/dsh-bili-wallpaper/main/assets/screenshot-settings.png" width="640" alt="Settings page: source, quality, picture controls, end-of-video action and account state">
 </p>
 <p align="center">
-  <img src="https://raw.githubusercontent.com/st21a1/dsh-bili-wallpaper/main/assets/screenshot-background.png" width="640" alt="A live stream playing behind the chat">
+  <img src="https://raw.githubusercontent.com/st21a1/dsh-bili-wallpaper/main/assets/screenshot-background.png" width="720" alt="A live room playing behind the chat: sidebar and bubbles turn into translucent glass">
 </p>
+
+> Both images are screenshots of the running interface: the original quality stream of
+> `https://live.bilibili.com/213`, with the title, owner id and three quality tiers exactly
+> as the API returned them.
 
 ---
 

@@ -979,7 +979,7 @@ export function apply(ctx) {
       }
       return sendJson(res, 200, {
         ok: true,
-        version: '0.3.0',
+        version: '0.3.1',
         home: dir,
         config,
         account,

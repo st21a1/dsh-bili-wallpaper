@@ -13,6 +13,42 @@
 
 ---
 
+## [0.3.1] - 2026-11-24
+
+修掉「设置页的滑条和开关与背景同色，看不见」；README 截图换成真实运行界面。
+
+### 修复
+
+- **滑条填充与开关开启态变成白色，压在深色玻璃上几乎不可见。**
+  根因是宿主在玻璃主题下把 `--dsw-alias-brand-primary` 解析成 `#f9fafb`（白色），
+  而代码写的是 `var(--dsw-alias-brand-primary, #4f8cff)` —— `#4f8cff` 只是
+  fallback，宿主给了值就不生效。于是滑条已填充段、开关开启态、主按钮全变白。
+  现在改用插件自己的一组强调色（`--bw-accent: #4f8cff`），不再依赖宿主令牌。
+- **滑条未填充的轨道是浏览器默认样式**，在透明背景上等于消失。
+  现在显式绘制轨道（`rgba(255,255,255,.22)` + 描边），
+  `::-webkit-slider-*` 与 `::-moz-range-*` 两套都覆盖，
+  拇指改为蓝色实心 + 白色描边 + 投影，任何背景上都看得清。
+- **开关关闭态用 `rgba(128,128,128,.42)` 灰**，叠在深色玻璃上像没渲染。
+  改为可见的浅灰底 + 白色描边勾出轮廓；开启态用蓝色。
+- 主按钮此前是白底白字（同样因为跟随宿主 brand 色），改为蓝底白字。
+- 输入框聚焦边框也不再跟随宿主 brand 色，改用自定义强调色 + 焦点环。
+
+### 文档
+
+- README 的两张截图更换为**真实运行界面截图**：
+  直播间 `https://live.bilibili.com/213` 的原画画面，
+  面板上的标题、UP 主 ID、三档清晰度均为接口真实返回。
+- 截图改为按外层卡片包围盒裁切并留出边缘，能看清完整圆角轮廓；
+  设置面板内部滚动的内容通过分段截图拼接完整呈现。
+- 新增 `scripts/capture-screenshots.mjs`（驱动无头浏览器走真实 UI 截图）
+  与 `scripts/probe-room.mjs`（验证某个直播间能否解析）。
+
+### 测试
+
+- 两个脚本都补了失败即退出的错误处理；17 个测试套件保持通过。
+
+---
+
 ## [0.3.0] - 2026-11-02
 
 修掉「拖进度条完全没反应，视频不跳」。
@@ -219,7 +255,8 @@
 - 浏览器拦截自动播放时：先静音放起来并在页面提示「打开声音」，点一下即恢复，
   不再悄悄静音。
 
-[Unreleased]: https://github.com/st21a1/dsh-bili-wallpaper/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/st21a1/dsh-bili-wallpaper/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/st21a1/dsh-bili-wallpaper/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/st21a1/dsh-bili-wallpaper/compare/v0.2.2...v0.3.0
 [0.2.2]: https://github.com/st21a1/dsh-bili-wallpaper/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/st21a1/dsh-bili-wallpaper/compare/v0.2.0...v0.2.1

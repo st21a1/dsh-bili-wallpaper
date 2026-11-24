@@ -215,7 +215,17 @@ body[data-ds-dark-theme][${ACTIVE_ATTR}] > #root > [class*="_frame"],
 body[data-ds-dark-theme][${ACTIVE_ATTR}] > #root > [class*="_frame"] > [class*="_root"],
 body[${ACTIVE_ATTR}] .dshDesktopFrame { background-color: transparent !important; }
 
-/* ── 设置页 ── */
+/* ── 设置页 ──
+   强调色不跟宿主的 --dsw-alias-brand-primary 走：实测这个令牌在玻璃主题下
+   解析成 #f9fafb（白色），滑条已填充段、开关开启态、按钮都会变成白色，
+   与深色玻璃面板（rgba(13,21,36,.72)）几乎同色 —— 看着像"没渲染"。
+   这里用自己的一组高对比度颜色，保证在透明面板上也看得清。 */
+body {
+  --bw-accent: #4f8cff;
+  --bw-accent-soft: rgba(79, 140, 255, .55);
+  --bw-track: rgba(255, 255, 255, .22);
+  --bw-track-off: rgba(255, 255, 255, .16);
+}
 [data-bw-page] { display: flex; flex-direction: column; gap: 18px; padding: 2px 2px 10px; max-width: 680px; }
 [data-bw-h1] { font-size: 15px; font-weight: 600; color: var(--dsw-alias-label-primary, inherit); }
 [data-bw-lead] { font-size: 12px; line-height: 18px; color: var(--dsw-alias-label-secondary, inherit); margin: 0; }
@@ -236,7 +246,7 @@ body[${ACTIVE_ATTR}] .dshDesktopFrame { background-color: transparent !important
 }
 [data-bw-input] { flex: 1; min-width: 0; }
 [data-bw-select] { min-width: 168px; }
-[data-bw-input]:focus, [data-bw-select]:focus { outline: none; border-color: var(--dsw-alias-brand-primary, #4f8cff); }
+[data-bw-input]:focus, [data-bw-select]:focus { outline: none; border-color: var(--bw-accent, #4f8cff); box-shadow: 0 0 0 2px var(--bw-accent-soft, rgba(79,140,255,.35)); }
 [data-bw-btn] {
   padding: 7px 12px; border-radius: 8px; font-size: 12px; cursor: pointer; font-family: inherit; white-space: nowrap;
   border: 1px solid var(--dsw-alias-border-l1, rgba(128,128,128,.24));
@@ -244,18 +254,66 @@ body[${ACTIVE_ATTR}] .dshDesktopFrame { background-color: transparent !important
   color: var(--dsw-alias-label-primary, inherit);
 }
 [data-bw-btn]:hover:not([disabled]) { background: var(--dsw-alias-bg-layer-3, rgba(128,128,128,.22)); }
+/* 主按钮：用自定义强调色。若跟宿主 brand 走，玻璃主题下是白底白字，按钮整个消失。 */
 [data-bw-btn][data-primary] {
-  background: var(--dsw-alias-brand-primary, #4f8cff); border-color: transparent;
-  color: var(--dsw-alias-label-primary-foreground, #fff);
+  background: var(--bw-accent, #4f8cff); border-color: transparent;
+  color: #fff; font-weight: 500;
 }
+[data-bw-btn][data-primary]:hover:not([disabled]) { background: #6b9dff; }
 [data-bw-btn][disabled] { opacity: .5; cursor: default; }
-[data-bw-sw] { flex: none; width: 38px; height: 22px; border-radius: 11px; border: 0; cursor: pointer; position: relative;
-  padding: 0; background: rgba(128,128,128,.42); transition: background .15s; }
-[data-bw-sw][data-on] { background: var(--dsw-alias-brand-primary, #4f8cff); }
-[data-bw-sw] i { position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%;
-  background: #fff; display: block; transition: left .15s; }
-[data-bw-sw][data-on] i { left: 19px; }
-[data-bw-slider] { flex: 1; min-width: 120px; accent-color: var(--dsw-alias-brand-primary, #4f8cff); }
+/*
+ * 开关：关闭态不能只用 42% 的灰 —— 叠在深色玻璃上等于隐形。
+ * 用两层：底色给一层可见的浅灰，再加白色描边把轮廓勾出来。
+ */
+[data-bw-sw] {
+  flex: none; width: 38px; height: 22px; border-radius: 11px; cursor: pointer; position: relative;
+  padding: 0; background: var(--bw-track-off, rgba(255,255,255,.16));
+  border: 1px solid rgba(255,255,255,.38);
+  transition: background .15s, border-color .15s;
+}
+[data-bw-sw][data-on] { background: var(--bw-accent, #4f8cff); border-color: var(--bw-accent, #4f8cff); }
+[data-bw-sw] i {
+  position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%;
+  background: #fff; display: block; transition: left .15s;
+  box-shadow: 0 1px 3px rgba(0,0,0,.45);
+}
+[data-bw-sw][data-on] i { left: 18px; }
+
+/*
+ * 滑条：accent-color 只影响"已填充段 + 拇指"，未填充轨道是浏览器默认样式，
+ * 在透明背景上不可见。这里显式画轨道和内层填充，两种引擎都覆盖。
+ */
+[data-bw-slider] {
+  flex: 1; min-width: 120px; height: 18px; margin: 0; cursor: pointer;
+  -webkit-appearance: none; appearance: none;
+  background: transparent;
+}
+[data-bw-slider]::-webkit-slider-runnable-track {
+  height: 5px; border-radius: 3px;
+  background: var(--bw-track, rgba(255,255,255,.22));
+  border: 1px solid rgba(255,255,255,.12);
+}
+[data-bw-slider]::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 14px; height: 14px; border-radius: 50%; margin-top: -5px;
+  background: var(--bw-accent, #4f8cff);
+  border: 2px solid #fff;
+  box-shadow: 0 1px 4px rgba(0,0,0,.5);
+  transition: transform .12s;
+}
+[data-bw-slider]:active::-webkit-slider-thumb { transform: scale(1.15); }
+[data-bw-slider]::-moz-range-track {
+  height: 5px; border-radius: 3px;
+  background: var(--bw-track, rgba(255,255,255,.22));
+  border: 1px solid rgba(255,255,255,.12);
+}
+[data-bw-slider]::-moz-range-thumb {
+  width: 14px; height: 14px; border-radius: 50%;
+  background: var(--bw-accent, #4f8cff);
+  border: 2px solid #fff;
+  box-shadow: 0 1px 4px rgba(0,0,0,.5);
+}
+[data-bw-slider]:focus-visible { outline: 2px solid var(--bw-accent-soft); outline-offset: 3px; border-radius: 3px; }
 [data-bw-val] { font-size: 11px; min-width: 44px; text-align: right; font-variant-numeric: tabular-nums;
   color: var(--dsw-alias-label-tertiary, inherit); }
 [data-bw-msg] { font-size: 11px; line-height: 17px; padding: 7px 9px; border-radius: 8px; word-break: break-word;
