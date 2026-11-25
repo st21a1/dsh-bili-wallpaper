@@ -13,6 +13,23 @@ Nothing yet.
 
 ---
 
+## [0.3.2] - 2026-11-24
+
+Fixes a packaging omission: the npm tarball had no screenshots while
+`screenshots.json` was still shipped.
+
+### Fixed
+
+- `assets/screenshot-settings.png` and `assets/screenshot-background.png` are now
+  included in the npm package. `files` previously listed only `assets/icon.svg`, so
+  `screenshots.json` shipped but pointed at paths that did not exist — anyone
+  installing from npm got a broken screenshot declaration.
+
+> No behaviour change. Installing from GitHub was never affected: both READMEs use
+> absolute `raw.githubusercontent.com` URLs, which resolve fine either way.
+
+---
+
 ## [0.3.1] - 2026-11-24
 
 Fixes "the sliders and switches in the settings page are the same colour as the
@@ -299,7 +316,8 @@ First release on npm and GitHub.
 - When the browser blocks autoplay: start muted, show an "turn sound on" hint in the page,
   and restore sound on one click — no more silent muting behind the user's back.
 
-[Unreleased]: https://github.com/st21a1/dsh-bili-wallpaper/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/st21a1/dsh-bili-wallpaper/compare/v0.3.2...HEAD
+[0.3.2]: https://github.com/st21a1/dsh-bili-wallpaper/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/st21a1/dsh-bili-wallpaper/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/st21a1/dsh-bili-wallpaper/compare/v0.2.2...v0.3.0
 [0.2.2]: https://github.com/st21a1/dsh-bili-wallpaper/compare/v0.2.1...v0.2.2

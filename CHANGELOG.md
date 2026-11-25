@@ -13,6 +13,22 @@
 
 ---
 
+## [0.3.2] - 2026-11-24
+
+补上一个发布遗漏：npm 包里没有截图，但 `screenshots.json` 在包内。
+
+### 修复
+
+- `assets/screenshot-settings.png` 与 `assets/screenshot-background.png`
+  现在包含在 npm 包中。此前 `files` 只收录了 `assets/icon.svg`，
+  而 `screenshots.json` 照常打进包却指向不存在的路径 —— 从 npm 装的用户
+  看到的截图声明是坏的。
+
+> 功能无变化。只用 GitHub 安装的用户不受影响，那两份 README 引用的是
+> `raw.githubusercontent.com` 绝对地址，本来就能正常显示。
+
+---
+
 ## [0.3.1] - 2026-11-24
 
 修掉「设置页的滑条和开关与背景同色，看不见」；README 截图换成真实运行界面。
@@ -255,7 +271,8 @@
 - 浏览器拦截自动播放时：先静音放起来并在页面提示「打开声音」，点一下即恢复，
   不再悄悄静音。
 
-[Unreleased]: https://github.com/st21a1/dsh-bili-wallpaper/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/st21a1/dsh-bili-wallpaper/compare/v0.3.2...HEAD
+[0.3.2]: https://github.com/st21a1/dsh-bili-wallpaper/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/st21a1/dsh-bili-wallpaper/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/st21a1/dsh-bili-wallpaper/compare/v0.2.2...v0.3.0
 [0.2.2]: https://github.com/st21a1/dsh-bili-wallpaper/compare/v0.2.1...v0.2.2
