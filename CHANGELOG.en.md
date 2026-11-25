@@ -13,6 +13,28 @@ Nothing yet.
 
 ---
 
+## [0.3.3] - 2026-11-25
+
+**Privacy fix**: the published screenshots contained the user's account details.
+
+### Fixed
+
+- The account name and avatar in the bottom-left user button of the background
+  screenshot are removed, replaced with neutral placeholder content.
+- The settings screenshot's account row read `已登录 · <username>`; the username part
+  is removed, leaving only the signed-in state.
+- `scripts/capture-screenshots.mjs` gained `redactIdentity()`: before capturing it
+  replaces the user button's text with `User`, hides the avatar, and truncates
+  `已登录 · <name>` to `已登录`. **Redaction happens at the DOM level, not by painting
+  over pixels afterwards** — the latter misses on a different resolution or a new
+  capture.
+
+> Screenshots published in 0.3.2 and earlier contained this information; they are
+> replaced by this release. If you pulled those two images from an npm cache or an
+> older tarball, update to 0.3.3.
+
+---
+
 ## [0.3.2] - 2026-11-24
 
 Fixes a packaging omission: the npm tarball had no screenshots while
@@ -316,7 +338,8 @@ First release on npm and GitHub.
 - When the browser blocks autoplay: start muted, show an "turn sound on" hint in the page,
   and restore sound on one click — no more silent muting behind the user's back.
 
-[Unreleased]: https://github.com/st21a1/dsh-bili-wallpaper/compare/v0.3.2...HEAD
+[Unreleased]: https://github.com/st21a1/dsh-bili-wallpaper/compare/v0.3.3...HEAD
+[0.3.3]: https://github.com/st21a1/dsh-bili-wallpaper/compare/v0.3.2...v0.3.3
 [0.3.2]: https://github.com/st21a1/dsh-bili-wallpaper/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/st21a1/dsh-bili-wallpaper/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/st21a1/dsh-bili-wallpaper/compare/v0.2.2...v0.3.0

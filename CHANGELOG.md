@@ -13,6 +13,26 @@
 
 ---
 
+## [0.3.3] - 2026-11-25
+
+**隐私修复**：已发布的截图里含使用者的账号信息。
+
+### 修复
+
+- 背景截图左下角用户按钮里的 **账号名与头像** 已抹除，
+  由中性的占位内容替代。
+- 设置页截图「账号」行原本写着 `已登录 · <用户名>`，
+  用户名部分已抹除，只保留「已登录」。
+- `scripts/capture-screenshots.mjs` 增加 `redactIdentity()`：
+  截图前在页面上把用户按钮文字换成 `User`、隐藏头像，
+  并把「已登录 · 用户名」截断成「已登录」。
+  **打码在 DOM 层完成，而不是事后涂改像素** —— 后者换个分辨率或换张图就会漏。
+
+> 0.3.2 及更早版本发布过的截图包含这些信息，已在本次替换。
+> 若你从 npm 缓存或旧 tarball 取过那两张图，请更新到 0.3.3。
+
+---
+
 ## [0.3.2] - 2026-11-24
 
 补上一个发布遗漏：npm 包里没有截图，但 `screenshots.json` 在包内。
@@ -271,7 +291,8 @@
 - 浏览器拦截自动播放时：先静音放起来并在页面提示「打开声音」，点一下即恢复，
   不再悄悄静音。
 
-[Unreleased]: https://github.com/st21a1/dsh-bili-wallpaper/compare/v0.3.2...HEAD
+[Unreleased]: https://github.com/st21a1/dsh-bili-wallpaper/compare/v0.3.3...HEAD
+[0.3.3]: https://github.com/st21a1/dsh-bili-wallpaper/compare/v0.3.2...v0.3.3
 [0.3.2]: https://github.com/st21a1/dsh-bili-wallpaper/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/st21a1/dsh-bili-wallpaper/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/st21a1/dsh-bili-wallpaper/compare/v0.2.2...v0.3.0

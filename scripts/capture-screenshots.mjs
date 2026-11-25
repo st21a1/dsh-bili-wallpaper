@@ -171,6 +171,49 @@ async function openBiliPanel() {
   await sleep(6000)
 }
 
+/**
+ * 截图前遮掉个人身份信息。
+ *
+ * 截图会发布到 README、npm 与 GitHub Release，里面绝不能出现使用者的
+ * 账号名（左下角那个用户按钮）和头像。这里在页面上把它们替换成占位内容，
+ * 而不是事后拿图片工具在像素上涂 —— 后者换个分辨率就会漏。
+ */
+const redactIdentity = async () => {
+  const replaced = await ev(`(() => {
+    let n = 0;
+    /* 1) 左下角用户按钮：文字换成 "User"，头像换成纯色块 */
+    for (const b of document.querySelectorAll('button')) {
+      const r = b.getBoundingClientRect();
+      const t = (b.innerText || '').trim();
+      if (r.width > 0 && r.y > innerHeight - 220 && t.length > 0 && t.length < 20) {
+        b.textContent = 'User';
+        n++;
+        for (const img of b.querySelectorAll('img')) { img.style.visibility = 'hidden'; }
+        for (const el of b.querySelectorAll('div,span')) {
+          const cs = getComputedStyle(el);
+          if (cs.borderRadius && parseFloat(cs.borderRadius) >= 8) el.style.visibility = 'hidden';
+        }
+      }
+    }
+    /* 2) 设置面板里的账号行（"已登录 · xxx"）—— 只保留"已登录" */
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    while (walker.nextNode()) {
+      const tn = walker.currentNode;
+      if (/已登录\s*·\s*\S+/.test(tn.nodeValue)) {
+        tn.nodeValue = tn.nodeValue.replace(/已登录\s*·\s*\S+/g, '已登录');
+        n++;
+      }
+      if (/Logged in\s*·\s*\S+/i.test(tn.nodeValue)) {
+        tn.nodeValue = tn.nodeValue.replace(/Logged in\s*·\s*\S+/gi, 'Logged in');
+        n++;
+      }
+    }
+    return n;
+  })()`)
+  log('已遮蔽身份信息处:', replaced)
+  await sleep(600)
+}
+
 /* ① 背景效果：不打开设置，直接截整个界面 */
 await sess('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 2, mobile: false })
 await sess('Page.navigate', { url: `${BASE}/?token=${TOKEN}` })
@@ -186,6 +229,7 @@ if (state?.video) {
   const t2 = await ev(`document.querySelector('#bw-layer video')?.currentTime`)
   log('4 秒后 currentTime:', t2, '（比之前大说明在实时播放）')
 }
+await redactIdentity()
 await shot('real-background.png')
 
 /* ② 设置面板：换成更高视口，进面板后裁到内容区 */
@@ -193,6 +237,7 @@ await sess('Emulation.setDeviceMetricsOverride', { width: 1440, height: 1240, de
 await sess('Page.navigate', { url: `${BASE}/?token=${TOKEN}` })
 await sleep(10000)
 await openBiliPanel()
+await redactIdentity()
 
 const bounds = await ev(`(() => {
   const root = document.querySelector('[data-bw-page]');
