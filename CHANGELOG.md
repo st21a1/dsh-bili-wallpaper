@@ -13,6 +13,21 @@
 
 ---
 
+## [0.3.4] - 2026-11-25
+
+背景截图换成**真实直播画面**（此前那张是补丁式打码，观感生硬）。
+
+### 文档
+
+- 背景截图重新拍摄：`https://live.bilibili.com/213` 正在开播时的原画画面，
+  身份遮蔽由 `redactIdentity()` 在 DOM 层完成 —— 显示为 `User` 与中性占位头像，
+  不是事后涂改像素。
+- 设置页截图同步重拍并分段拼接，底部账号行只显示「已登录」。
+
+> 两张图相对 0.3.3 只是观感改善，隐私处理方式相同。
+
+---
+
 ## [0.3.3] - 2026-11-25
 
 **隐私修复**：已发布的截图里含使用者的账号信息。
@@ -291,7 +306,8 @@
 - 浏览器拦截自动播放时：先静音放起来并在页面提示「打开声音」，点一下即恢复，
   不再悄悄静音。
 
-[Unreleased]: https://github.com/st21a1/dsh-bili-wallpaper/compare/v0.3.3...HEAD
+[Unreleased]: https://github.com/st21a1/dsh-bili-wallpaper/compare/v0.3.4...HEAD
+[0.3.4]: https://github.com/st21a1/dsh-bili-wallpaper/compare/v0.3.3...v0.3.4
 [0.3.3]: https://github.com/st21a1/dsh-bili-wallpaper/compare/v0.3.2...v0.3.3
 [0.3.2]: https://github.com/st21a1/dsh-bili-wallpaper/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/st21a1/dsh-bili-wallpaper/compare/v0.3.0...v0.3.1

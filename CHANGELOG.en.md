@@ -13,6 +13,24 @@ Nothing yet.
 
 ---
 
+## [0.3.4] - 2026-11-25
+
+The background screenshot is now a **real live frame** (the previous one was patched by
+painting over pixels and looked blunt).
+
+### Documentation
+
+- Background screenshot recaptured: the original-quality picture of
+  `https://live.bilibili.com/213` while it was broadcasting, with identity redaction done
+  by `redactIdentity()` at the DOM level — shown as `User` plus a neutral placeholder
+  avatar, rather than painted over afterwards.
+- The settings screenshot was recaptured too and stitched from segments; its account row
+  shows only the signed-in state.
+
+> Relative to 0.3.3 this only improves how the images look; the privacy handling is the same.
+
+---
+
 ## [0.3.3] - 2026-11-25
 
 **Privacy fix**: the published screenshots contained the user's account details.
@@ -338,7 +356,8 @@ First release on npm and GitHub.
 - When the browser blocks autoplay: start muted, show an "turn sound on" hint in the page,
   and restore sound on one click — no more silent muting behind the user's back.
 
-[Unreleased]: https://github.com/st21a1/dsh-bili-wallpaper/compare/v0.3.3...HEAD
+[Unreleased]: https://github.com/st21a1/dsh-bili-wallpaper/compare/v0.3.4...HEAD
+[0.3.4]: https://github.com/st21a1/dsh-bili-wallpaper/compare/v0.3.3...v0.3.4
 [0.3.3]: https://github.com/st21a1/dsh-bili-wallpaper/compare/v0.3.2...v0.3.3
 [0.3.2]: https://github.com/st21a1/dsh-bili-wallpaper/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/st21a1/dsh-bili-wallpaper/compare/v0.3.0...v0.3.1
